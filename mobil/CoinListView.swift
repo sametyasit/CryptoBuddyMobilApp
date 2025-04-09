@@ -89,7 +89,7 @@ struct CoinListView: View {
     private func fetchCoins() async {
         isLoading = true
         do {
-            let newCoins = try await APIService.shared.fetchCoins(page: currentPage)
+            let newCoins = try await APIService.shared.fetchCoins(page: currentPage, perPage: 30)
             if currentPage == 1 {
                 coins = newCoins
             } else {

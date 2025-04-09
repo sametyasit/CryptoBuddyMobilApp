@@ -6,30 +6,49 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		11518DF32DA64CE8009476B9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11518DE02DA64CE8009476B9 /* Assets.xcassets */; };
+		11518DF52DA64CE8009476B9 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 11518DE82DA64CE8009476B9 /* LaunchScreen.storyboard */; };
+		11518DF62DA64CE8009476B9 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 11518DEB2DA64CE8009476B9 /* Main.storyboard */; };
+		11518DF72DA64CE8009476B9 /* NewsItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DDC2DA64CE8009476B9 /* NewsItem.swift */; };
+		11518DF82DA64CE8009476B9 /* APIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DDE2DA64CE8009476B9 /* APIService.swift */; };
+		11518DF92DA64CE8009476B9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DDF2DA64CE8009476B9 /* AppDelegate.swift */; };
+		11518DFA2DA64CE8009476B9 /* Coin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DE12DA64CE8009476B9 /* Coin.swift */; };
+		11518DFB2DA64CE8009476B9 /* CoinListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DE22DA64CE8009476B9 /* CoinListView.swift */; };
+		11518DFC2DA64CE8009476B9 /* Colors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DE32DA64CE8009476B9 /* Colors.swift */; };
+		11518DFD2DA64CE8009476B9 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DE42DA64CE8009476B9 /* ContentView.swift */; };
+		11518DFE2DA64CE8009476B9 /* CryptoBuddyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DE52DA64CE8009476B9 /* CryptoBuddyApp.swift */; };
+		11518DFF2DA64CE8009476B9 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DE92DA64CE8009476B9 /* LoginView.swift */; };
+		11518E002DA64CE8009476B9 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DEC2DA64CE8009476B9 /* MainTabView.swift */; };
+		11518E012DA64CE8009476B9 /* NewsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DED2DA64CE8009476B9 /* NewsView.swift */; };
+		11518E022DA64CE8009476B9 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DEE2DA64CE8009476B9 /* ProfileView.swift */; };
+		11518E032DA64CE8009476B9 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DEF2DA64CE8009476B9 /* SceneDelegate.swift */; };
+		11518E042DA64CE8009476B9 /* SignUpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DF02DA64CE8009476B9 /* SignUpView.swift */; };
+		11518E052DA64CE8009476B9 /* ViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11518DF12DA64CE8009476B9 /* ViewController.swift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		110EF2812D9EB3FE007622B0 /* mobil.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = mobil.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		11518DDC2DA64CE8009476B9 /* NewsItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsItem.swift; sourceTree = "<group>"; };
+		11518DDE2DA64CE8009476B9 /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
+		11518DDF2DA64CE8009476B9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		11518DE02DA64CE8009476B9 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		11518DE12DA64CE8009476B9 /* Coin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Coin.swift; sourceTree = "<group>"; };
+		11518DE22DA64CE8009476B9 /* CoinListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoinListView.swift; sourceTree = "<group>"; };
+		11518DE32DA64CE8009476B9 /* Colors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Colors.swift; sourceTree = "<group>"; };
+		11518DE42DA64CE8009476B9 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		11518DE52DA64CE8009476B9 /* CryptoBuddyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CryptoBuddyApp.swift; sourceTree = "<group>"; };
+		11518DE62DA64CE8009476B9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		11518DE72DA64CE8009476B9 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
+		11518DE92DA64CE8009476B9 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		11518DEA2DA64CE8009476B9 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
+		11518DEC2DA64CE8009476B9 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
+		11518DED2DA64CE8009476B9 /* NewsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsView.swift; sourceTree = "<group>"; };
+		11518DEE2DA64CE8009476B9 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
+		11518DEF2DA64CE8009476B9 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		11518DF02DA64CE8009476B9 /* SignUpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
+		11518DF12DA64CE8009476B9 /* ViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		110EF2932D9EB400007622B0 /* Exceptions for "mobil" folder in "mobil" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 110EF2802D9EB3FE007622B0 /* mobil */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		110EF2832D9EB3FE007622B0 /* mobil */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				110EF2932D9EB400007622B0 /* Exceptions for "mobil" folder in "mobil" target */,
-			);
-			path = mobil;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		110EF27E2D9EB3FE007622B0 /* Frameworks */ = {
@@ -45,7 +64,7 @@
 		110EF2782D9EB3FE007622B0 = {
 			isa = PBXGroup;
 			children = (
-				110EF2832D9EB3FE007622B0 /* mobil */,
+				11518DF22DA64CE8009476B9 /* mobil */,
 				110EF2822D9EB3FE007622B0 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -56,6 +75,40 @@
 				110EF2812D9EB3FE007622B0 /* mobil.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		11518DDD2DA64CE8009476B9 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				11518DDC2DA64CE8009476B9 /* NewsItem.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		11518DF22DA64CE8009476B9 /* mobil */ = {
+			isa = PBXGroup;
+			children = (
+				11518DDD2DA64CE8009476B9 /* Models */,
+				11518DDE2DA64CE8009476B9 /* APIService.swift */,
+				11518DDF2DA64CE8009476B9 /* AppDelegate.swift */,
+				11518DE02DA64CE8009476B9 /* Assets.xcassets */,
+				11518DE12DA64CE8009476B9 /* Coin.swift */,
+				11518DE22DA64CE8009476B9 /* CoinListView.swift */,
+				11518DE32DA64CE8009476B9 /* Colors.swift */,
+				11518DE42DA64CE8009476B9 /* ContentView.swift */,
+				11518DE52DA64CE8009476B9 /* CryptoBuddyApp.swift */,
+				11518DE62DA64CE8009476B9 /* Info.plist */,
+				11518DE82DA64CE8009476B9 /* LaunchScreen.storyboard */,
+				11518DE92DA64CE8009476B9 /* LoginView.swift */,
+				11518DEB2DA64CE8009476B9 /* Main.storyboard */,
+				11518DEC2DA64CE8009476B9 /* MainTabView.swift */,
+				11518DED2DA64CE8009476B9 /* NewsView.swift */,
+				11518DEE2DA64CE8009476B9 /* ProfileView.swift */,
+				11518DEF2DA64CE8009476B9 /* SceneDelegate.swift */,
+				11518DF02DA64CE8009476B9 /* SignUpView.swift */,
+				11518DF12DA64CE8009476B9 /* ViewController.swift */,
+			);
+			path = mobil;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -72,9 +125,6 @@
 			buildRules = (
 			);
 			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				110EF2832D9EB3FE007622B0 /* mobil */,
 			);
 			name = mobil;
 			packageProductDependencies = (
@@ -122,6 +172,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				11518DF32DA64CE8009476B9 /* Assets.xcassets in Resources */,
+				11518DF52DA64CE8009476B9 /* LaunchScreen.storyboard in Resources */,
+				11518DF62DA64CE8009476B9 /* Main.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -132,10 +185,44 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				11518DF72DA64CE8009476B9 /* NewsItem.swift in Sources */,
+				11518DF82DA64CE8009476B9 /* APIService.swift in Sources */,
+				11518DF92DA64CE8009476B9 /* AppDelegate.swift in Sources */,
+				11518DFA2DA64CE8009476B9 /* Coin.swift in Sources */,
+				11518DFB2DA64CE8009476B9 /* CoinListView.swift in Sources */,
+				11518DFC2DA64CE8009476B9 /* Colors.swift in Sources */,
+				11518DFD2DA64CE8009476B9 /* ContentView.swift in Sources */,
+				11518DFE2DA64CE8009476B9 /* CryptoBuddyApp.swift in Sources */,
+				11518DFF2DA64CE8009476B9 /* LoginView.swift in Sources */,
+				11518E002DA64CE8009476B9 /* MainTabView.swift in Sources */,
+				11518E012DA64CE8009476B9 /* NewsView.swift in Sources */,
+				11518E022DA64CE8009476B9 /* ProfileView.swift in Sources */,
+				11518E032DA64CE8009476B9 /* SceneDelegate.swift in Sources */,
+				11518E042DA64CE8009476B9 /* SignUpView.swift in Sources */,
+				11518E052DA64CE8009476B9 /* ViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		11518DE82DA64CE8009476B9 /* LaunchScreen.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				11518DE72DA64CE8009476B9 /* Base */,
+			);
+			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		11518DEB2DA64CE8009476B9 /* Main.storyboard */ = {
+			isa = PBXVariantGroup;
+			children = (
+				11518DEA2DA64CE8009476B9 /* Base */,
+			);
+			name = Main.storyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		110EF2952D9EB400007622B0 /* Debug */ = {

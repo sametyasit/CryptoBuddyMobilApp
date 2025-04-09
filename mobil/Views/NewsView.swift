@@ -2,7 +2,7 @@ import SwiftUI
 import SafariServices
 
 // MARK: - Error Types
-enum NewsError: Error {
+public enum NewsError: Error {
     case invalidURL
     case invalidResponse
     case networkError
@@ -10,7 +10,7 @@ enum NewsError: Error {
     case allAPIsFailed
     case invalidData
     
-    var localizedDescription: String {
+    public var localizedDescription: String {
         switch self {
         case .invalidURL:
             return "Invalid URL"
@@ -29,11 +29,11 @@ enum NewsError: Error {
 }
 
 // MARK: - News Service
-final class NewsService {
-    static let shared = NewsService()
+public final class NewsService {
+    public static let shared = NewsService()
     private init() {}
     
-    enum NewsCategory: String, CaseIterable {
+    public enum NewsCategory: String, CaseIterable {
         case all = "All"
         case trading = "Trading"
         case technology = "Technology"
@@ -44,26 +44,37 @@ final class NewsService {
         case metaverse = "Metaverse"
     }
     
-    struct NewsItem: Identifiable, Hashable {
-        let id: String
-        let title: String
-        let description: String
-        let url: String
-        let imageUrl: String
-        let publishedAt: Date
-        let source: String
-        let category: NewsCategory
+    public struct NewsItem: Identifiable, Hashable {
+        public let id: String
+        public let title: String
+        public let description: String
+        public let url: String
+        public let imageUrl: String
+        public let publishedAt: Date
+        public let source: String
+        public let category: NewsCategory
         
-        static func == (lhs: NewsItem, rhs: NewsItem) -> Bool {
+        public static func == (lhs: NewsItem, rhs: NewsItem) -> Bool {
             lhs.id == rhs.id
         }
         
-        func hash(into hasher: inout Hasher) {
+        public func hash(into hasher: inout Hasher) {
             hasher.combine(id)
+        }
+        
+        public init(id: String, title: String, description: String, url: String, imageUrl: String, publishedAt: Date, source: String, category: NewsCategory) {
+            self.id = id
+            self.title = title
+            self.description = description
+            self.url = url
+            self.imageUrl = imageUrl
+            self.publishedAt = publishedAt
+            self.source = source
+            self.category = category
         }
     }
     
-    func fetchNews(category: NewsCategory = .all, page: Int = 1) async throws -> [NewsItem] {
+    public func fetchNews(category: NewsCategory = .all, page: Int = 1) async throws -> [NewsItem] {
         // Simüle edilmiş veri
         return [
             NewsItem(
@@ -81,19 +92,21 @@ final class NewsService {
 }
 
 // MARK: - View Model
-final class NewsViewModel: ObservableObject {
-    @Published var allNews: [NewsService.NewsItem] = []
-    @Published var filteredNews: [NewsService.NewsItem] = []
-    @Published var isLoading = false
-    @Published var isLoadingMore = false
-    @Published var error: NewsError?
-    @Published var selectedCategory: NewsService.NewsCategory = .all
-    @Published var activeSources: Set<String> = []
+public final class NewsViewModel: ObservableObject {
+    @Published public var allNews: [NewsService.NewsItem] = []
+    @Published public var filteredNews: [NewsService.NewsItem] = []
+    @Published public var isLoading = false
+    @Published public var isLoadingMore = false
+    @Published public var error: NewsError?
+    @Published public var selectedCategory: NewsService.NewsCategory = .all
+    @Published public var activeSources: Set<String> = []
     
     private let newsService = NewsService.shared
     private var currentPage = 1
     
-    func fetchNews() async {
+    public init() {}
+    
+    public func fetchNews() async {
         await MainActor.run {
             isLoading = true
             error = nil
@@ -115,7 +128,7 @@ final class NewsViewModel: ObservableObject {
         }
     }
     
-    func loadMoreNews() async {
+    public func loadMoreNews() async {
         guard !isLoadingMore else { return }
         
         await MainActor.run {
@@ -139,7 +152,7 @@ final class NewsViewModel: ObservableObject {
         }
     }
     
-    func filterNews(with searchText: String) {
+    public func filterNews(with searchText: String) {
         if searchText.isEmpty {
             filteredNews = allNews
         } else {
@@ -150,7 +163,7 @@ final class NewsViewModel: ObservableObject {
         }
     }
     
-    func filterNews(by category: NewsService.NewsCategory) {
+    public func filterNews(by category: NewsService.NewsCategory) {
         if category == .all {
             filteredNews = allNews
         } else {
@@ -164,7 +177,7 @@ final class NewsViewModel: ObservableObject {
 }
 
 // MARK: - Views
-struct NewsView: View {
+public struct NewsView: View {
     @StateObject private var viewModel = NewsViewModel()
     @State private var showingSafari = false
     @State private var selectedNewsURL: URL?
@@ -172,7 +185,9 @@ struct NewsView: View {
     @State private var selectedCategory: NewsService.NewsCategory = .all
     @State private var showError = false
     
-    var body: some View {
+    public init() {}
+    
+    public var body: some View {
         NavigationView {
             ZStack {
                 Color(.systemBackground).edgesIgnoringSafeArea(.all)

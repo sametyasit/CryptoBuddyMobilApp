@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 class APIService {
     static let shared = APIService()
@@ -26,23 +27,47 @@ class APIService {
         return "https://assets.coingecko.com/coins/images/1/large/\(symbol.lowercased()).png"
     }
     
-    func fetchCoins(page: Int, perPage: Int = 50) async throws -> [Coin] {
+    func fetchCoins(page: Int, perPage: Int) async throws -> [Coin] {
+        print("🔍 Fetching coins page \(page) with \(perPage) per page")
         var allCoins: [Coin] = []
+        var errors: [Error] = []
         
-        // Try CoinGecko first
+        // Try CoinGecko
         do {
+            print("🔍 Trying CoinGecko API...")
             allCoins = try await fetchCoinsFromCoinGecko(page: page, perPage: perPage)
+            print("✅ CoinGecko success: \(allCoins.count) coins")
+            return allCoins
         } catch {
-            print("CoinGecko API failed, trying CoinStats...")
+            print("❌ CoinGecko failed: \(error)")
+            errors.append(error)
+            
+            // Try CoinStats
             do {
-                allCoins = try await fetchCoinsFromCoinStats(limit: perPage)
+                print("🔍 Trying CoinStats API...")
+                allCoins = try await fetchCoinsFromCoinStats(limit: perPage, skip: (page - 1) * perPage)
+                print("✅ CoinStats success: \(allCoins.count) coins")
+                return allCoins
             } catch {
-                print("CoinStats API failed, trying CoinCap...")
-                allCoins = try await fetchCoinsFromCoinCap(limit: perPage)
+                print("❌ CoinStats failed: \(error)")
+                errors.append(error)
+                
+                // Try CoinCap
+                do {
+                    print("🔍 Trying CoinCap API...")
+                    allCoins = try await fetchCoinsFromCoinCap(limit: perPage, offset: (page - 1) * perPage)
+                    print("✅ CoinCap success: \(allCoins.count) coins")
+                    return allCoins
+                } catch {
+                    print("❌ CoinCap failed: \(error)")
+                    errors.append(error)
+                    
+                    // If all APIs failed, throw a specific error
+                    print("❌❌❌ All API sources failed!")
+                    throw APIError.allAPIsFailed
+                }
             }
         }
-        
-        return allCoins.sorted { $0.marketCap ?? 0 > $1.marketCap ?? 0 }
     }
     
     private func fetchCoinsFromCoinGecko(page: Int, perPage: Int) async throws -> [Coin] {
@@ -79,12 +104,20 @@ class APIService {
         }
     }
     
-    private func fetchCoinsFromCoinStats(limit: Int) async throws -> [Coin] {
-        var request = URLRequest(url: URL(string: "\(coinStatsAPI)/coins?limit=\(limit)")!)
+    private func fetchCoinsFromCoinStats(limit: Int, skip: Int = 0) async throws -> [Coin] {
+        var request = URLRequest(url: URL(string: "\(coinStatsAPI)/coins?limit=\(limit)&skip=\(skip)")!)
         request.setValue(coinStatsKey, forHTTPHeaderField: "X-API-KEY")
-        let (data, _) = try await URLSession.shared.data(for: request)
-        let response = try JSONDecoder().decode(CoinStatsResponse.self, from: data)
-        return response.coins.enumerated().map { index, coin in
+        request.timeoutInterval = 15
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.invalidResponse
+        }
+        
+        let statsResponse = try JSONDecoder().decode(CoinStatsResponse.self, from: data)
+        return statsResponse.coins.enumerated().map { index, coin in
             Coin(
                 id: coin.id,
                 name: coin.name,
@@ -93,20 +126,20 @@ class APIService {
                 change24h: coin.priceChange1d,
                 marketCap: coin.marketCap,
                 image: coin.icon,
-                rank: index + 1
+                rank: skip + index + 1
             )
         }
     }
     
-    private func fetchCoinsFromCoinCap(limit: Int) async throws -> [Coin] {
-        let urlString = "\(coinCapURL)/assets?limit=\(limit)"
+    private func fetchCoinsFromCoinCap(limit: Int, offset: Int = 0) async throws -> [Coin] {
+        let urlString = "\(coinCapURL)/assets?limit=\(limit)&offset=\(offset)"
         
         guard let url = URL(string: urlString) else {
             throw APIError.invalidURL
         }
         
         var request = URLRequest(url: url)
-        request.timeoutInterval = 10
+        request.timeoutInterval = 15
         
         let (data, response) = try await URLSession.shared.data(for: request)
         
@@ -126,8 +159,8 @@ class APIService {
                 price: Double(coinData.priceUsd) ?? 0,
                 change24h: Double(coinData.changePercent24Hr) ?? 0,
                 marketCap: Double(coinData.marketCapUsd) ?? 0,
-                image: getLogoURL(symbol: coinData.symbol),
-                rank: Int(coinData.rank) ?? (index + 1)
+                image: "https://assets.coincap.io/assets/icons/\(coinData.symbol.lowercased())@2x.png",
+                rank: Int(coinData.rank) ?? (offset + index + 1)
             )
         }
     }
