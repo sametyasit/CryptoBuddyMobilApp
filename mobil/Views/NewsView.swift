@@ -75,19 +75,30 @@ public final class NewsService {
     }
     
     public func fetchNews(category: NewsCategory = .all, page: Int = 1) async throws -> [NewsItem] {
-        // Simüle edilmiş veri
-        return [
+        let apiKey = "YOUR_NEWS_API_KEY"
+        let urlString = "https://newsapi.org/v2/top-headlines?category=business&apiKey=\(apiKey)"
+        guard let url = URL(string: urlString) else {
+            throw NewsError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw NewsError.invalidResponse
+        }
+        
+        let newsResponse = try JSONDecoder().decode(NewsAPIResponse.self, from: data)
+        return newsResponse.articles.map { article in
             NewsItem(
                 id: UUID().uuidString,
-                title: "Sample News Title",
-                description: "This is a sample news description",
-                url: "https://example.com",
-                imageUrl: "https://example.com/image.jpg",
-                publishedAt: Date(),
-                source: "Sample Source",
+                title: article.title,
+                description: article.description ?? "",
+                url: article.url,
+                imageUrl: article.urlToImage ?? "",
+                publishedAt: ISO8601DateFormatter().date(from: article.publishedAt) ?? Date(),
+                source: article.source.name,
                 category: category
             )
-        ]
+        }
     }
 }
 
