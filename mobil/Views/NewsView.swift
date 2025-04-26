@@ -1,5 +1,6 @@
 import SwiftUI
 import SafariServices
+import APIService
 
 // MARK: - Error Types
 public enum NewsError: Error {
@@ -114,17 +115,49 @@ public final class NewsViewModel: ObservableObject {
     
     private let newsService = NewsService.shared
     private var currentPage = 1
+    private var isTimerActive = false
     
     public init() {}
     
+    public func startAutoRefresh() {
+        guard !isTimerActive else { return }
+        isTimerActive = true
+        APIService.shared.startNewsUpdates { [weak self] news in
+            print("Gelen haber sayısı (timer): \(news.count)")
+            DispatchQueue.main.async {
+                self?.allNews = news.map {
+                    NewsService.NewsItem(
+                        id: $0.id,
+                        title: $0.title,
+                        description: $0.description,
+                        url: $0.url,
+                        imageUrl: $0.imageUrl,
+                        publishedAt: $0.publishedAt,
+                        source: $0.source,
+                        category: .all
+                    )
+                }
+                self?.filteredNews = self?.allNews ?? []
+                self?.updateActiveSources()
+                self?.isLoading = false
+            }
+        }
+    }
+    
+    public func stopAutoRefresh() {
+        isTimerActive = false
+        APIService.shared.stopNewsUpdates()
+    }
+    
     public func fetchNews() async {
+        print("fetchNews fonksiyonu çağrıldı")
         await MainActor.run {
             isLoading = true
             error = nil
         }
-        
         do {
             let news = try await newsService.fetchNews(category: selectedCategory, page: currentPage)
+            print("Gelen haber sayısı (manuel fetch): \(news.count)")
             await MainActor.run {
                 self.allNews = news
                 self.filteredNews = news
@@ -189,136 +222,48 @@ public final class NewsViewModel: ObservableObject {
 
 // MARK: - Views
 public struct NewsView: View {
-    @StateObject private var viewModel = NewsViewModel()
+    @State private var news: [NewsService.NewsItem] = []
     @State private var showingSafari = false
     @State private var selectedNewsURL: URL?
-    @State private var searchText = ""
-    @State private var selectedCategory: NewsService.NewsCategory = .all
-    @State private var showError = false
+    @State private var isLoading = false
+    @State private var error: String? = nil
     
-    public init() {}
-    
-    public var body: some View {
+    var body: some View {
         NavigationView {
             ZStack {
                 Color(.systemBackground).edgesIgnoringSafeArea(.all)
                 
-                VStack(spacing: 0) {
-                    // Kategori seçici
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(NewsService.NewsCategory.allCases, id: \.self) { category in
-                                CategoryButton(
-                                    title: category.rawValue,
-                                    isSelected: selectedCategory == category
-                                ) {
-                                    selectedCategory = category
-                                    Task {
-                                        await viewModel.fetchNews()
-                                    }
-                                }
-                            }
+                if isLoading && news.isEmpty {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                } else if let error = error {
+                    VStack(spacing: 16) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 50))
+                            .foregroundColor(.red)
+                        Text(error)
+                            .multilineTextAlignment(.center)
+                        Button("Try Again") {
+                            fetchNewsManually()
                         }
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
-                    }
-                    
-                    // Arama çubuğu
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
-                        
-                        TextField("Search news...", text: $searchText)
-                            .textFieldStyle(PlainTextFieldStyle())
-                            .onChange(of: searchText) { _ in
-                                viewModel.filterNews(with: searchText)
-                            }
-                        
-                        if !searchText.isEmpty {
-                            Button(action: {
-                                searchText = ""
-                                viewModel.filterNews(with: "")
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.gray)
-                            }
-                        }
+                        .foregroundColor(.blue)
                     }
                     .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(10)
-                    .padding(.horizontal)
-                    
-                    // API kaynakları
-                    if !viewModel.filteredNews.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                Text("Sources:")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                ForEach(Array(viewModel.activeSources), id: \.self) { source in
-                                    Text(source)
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.blue.opacity(0.1))
-                                        .cornerRadius(8)
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-                        .padding(.top, 8)
-                    }
-                    
-                    // Haber listesi
+                } else {
                     ScrollView {
                         LazyVStack(spacing: 16) {
-                            ForEach(viewModel.filteredNews) { news in
-                                NewsCard(newsItem: news)
+                            ForEach(news, id: \ .id) { item in
+                                NewsCardSimple(newsItem: item)
                                     .onTapGesture {
-                                        if let url = URL(string: news.url) {
+                                        if let url = URL(string: item.url) {
                                             selectedNewsURL = url
                                             showingSafari = true
                                         }
                                     }
                             }
-                            
-                            if viewModel.isLoadingMore {
-                                ProgressView()
-                                    .padding()
-                            }
                         }
                         .padding()
                     }
-                    .refreshable {
-                        await viewModel.fetchNews()
-                    }
-                }
-                
-                // Yükleniyor göstergesi
-                if viewModel.isLoading && viewModel.filteredNews.isEmpty {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                }
-                
-                // Hata mesajı
-                if let error = viewModel.error {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 50))
-                            .foregroundColor(.red)
-                        
-                        Text(error.localizedDescription)
-                            .multilineTextAlignment(.center)
-                        
-                        Button("Try Again") {
-                            Task {
-                                await viewModel.fetchNews()
-                            }
-                        }
-                        .foregroundColor(.blue)
-                    }
-                    .padding()
                 }
             }
             .navigationTitle("Crypto News")
@@ -330,91 +275,86 @@ public struct NewsView: View {
             }
         }
         .onAppear {
-            if viewModel.filteredNews.isEmpty {
-                Task {
-                    await viewModel.fetchNews()
+            isLoading = true
+            error = nil
+            APIService.shared.startNewsUpdates { items in
+                print("APIService'den gelen haber sayısı: \(items.count)")
+                DispatchQueue.main.async {
+                    self.news = items
+                    self.isLoading = false
+                }
+            }
+            fetchNewsManually()
+        }
+        .onDisappear {
+            APIService.shared.stopNewsUpdates()
+        }
+    }
+    
+    private func fetchNewsManually() {
+        isLoading = true
+        error = nil
+        Task {
+            do {
+                let items = try await APIService.shared.fetchNews()
+                print("Manuel fetch ile gelen haber sayısı: \(items.count)")
+                await MainActor.run {
+                    self.news = items
+                    self.isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.error = error.localizedDescription
                 }
             }
         }
     }
 }
 
-// MARK: - Supporting Views
-struct CategoryButton: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(isSelected ? .white : .secondary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(isSelected ? Color.blue : Color(.secondarySystemBackground))
-                .cornerRadius(20)
-        }
-    }
-}
-
-struct NewsCard: View {
+struct NewsCardSimple: View {
     let newsItem: NewsService.NewsItem
-    
     var body: some View {
-        Link(destination: URL(string: newsItem.url)!) {
-            VStack(alignment: .leading, spacing: 8) {
-                AsyncImage(url: URL(string: newsItem.imageUrl)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
+        VStack(alignment: .leading, spacing: 8) {
+            if let url = URL(string: newsItem.imageUrl), !newsItem.imageUrl.isEmpty {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fill)
                 } placeholder: {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
+                    Rectangle().fill(Color.gray.opacity(0.2))
                 }
                 .frame(height: 200)
                 .clipped()
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(newsItem.title)
-                        .font(.headline)
-                        .lineLimit(2)
-                    
-                    Text(newsItem.description)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .lineLimit(3)
-                    
-                    HStack {
-                        Text(newsItem.source)
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                        
-                        Spacer()
-                        
-                        Text(newsItem.publishedAt, style: .relative)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
             }
-            .background(Color(.systemBackground))
-            .cornerRadius(10)
-            .shadow(radius: 3)
+            Text(newsItem.title)
+                .font(.headline)
+                .lineLimit(2)
+            Text(newsItem.description)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .lineLimit(3)
+            HStack {
+                Text(newsItem.source)
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                Spacer()
+                Text(newsItem.publishedAt, style: .relative)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
         }
-        .buttonStyle(PlainButtonStyle())
+        .padding(.horizontal, 8)
+        .padding(.bottom, 8)
+        .background(Color(.systemBackground))
+        .cornerRadius(10)
+        .shadow(radius: 3)
     }
 }
 
 struct SafariView: UIViewControllerRepresentable {
     let url: URL
-    
     func makeUIViewController(context: Context) -> SFSafariViewController {
         return SFSafariViewController(url: url)
     }
-    
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
