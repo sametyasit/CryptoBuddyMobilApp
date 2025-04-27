@@ -129,14 +129,25 @@ struct CoinRow: View {
                 .frame(width: 40, alignment: .leading)
             
             // Coin logo
-            AsyncImage(url: URL(string: coin.image)) { image in
-                image
+            if let url = URL(string: coin.image), !coin.image.isEmpty {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } placeholder: {
+                    Image(systemName: "bitcoinsign.circle")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .foregroundColor(.gray.opacity(0.3))
+                }
+                .frame(width: 32, height: 32)
+            } else {
+                Image(systemName: "bitcoinsign.circle")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-            } placeholder: {
-                ProgressView()
+                    .foregroundColor(.gray.opacity(0.3))
+                    .frame(width: 32, height: 32)
             }
-            .frame(width: 32, height: 32)
             
             // Coin name and symbol
             VStack(alignment: .leading, spacing: 2) {
