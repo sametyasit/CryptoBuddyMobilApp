@@ -1,5 +1,6 @@
 import SwiftUI
 import Foundation
+import Combine
 // Views klasöründeki view'ları kullanmak için import gerekmez, ancak derleyiciye yardımcı olması için aşağıdaki gibi bir not ekleyebilirim:
 // Eğer modül ayrımı varsa: @testable import mobil.Views
 // Ancak SwiftUI'da aynı target içindeyse otomatik olarak bulur. Eğer bulamıyorsa, dosya yollarını ve target membership'ı kontrol et.
@@ -71,81 +72,100 @@ struct MarketView: View {
 
 struct SearchView: View {
     @Binding var showingLoginView: Bool
+    @StateObject private var viewModel = SearchViewModel()
+    @State private var selectedNews: NewsService.NewsItem? = nil
+    @State private var showingNewsDetail = false
+    @State private var animationType: CryptoSearchAnimation = .random()
     
     var body: some View {
         NavigationView {
             ZStack {
                 Color.black.edgesIgnoringSafeArea(.all)
                 VStack(spacing: 20) {
+                    // Arama kutusu
                     HStack {
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(Color.gray)
                             .padding(.leading, 10)
-                        TextField("Search coins, news...", text: .constant(""))
+                        TextField("Search coins or news...", text: $viewModel.searchText)
                             .foregroundColor(.white)
                             .padding(10)
-                        Button(action: {}) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(Color.gray)
-                                .padding(.trailing, 10)
+                        if !viewModel.searchText.isEmpty {
+                            Button(action: { viewModel.searchText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(Color.gray)
+                                    .padding(.trailing, 10)
+                            }
                         }
                     }
                     .background(Color(UIColor.darkGray).opacity(0.3))
                     .cornerRadius(15)
                     .padding(.horizontal)
                     .padding(.top, 10)
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Popular Searches")
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                                .padding(.horizontal)
-                                .padding(.top, 10)
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 12) {
-                                    ForEach(["Bitcoin", "Ethereum", "XRP", "Solana", "Cardano"], id: \.self) { item in
-                                        Text(item)
-                                            .foregroundColor(.white)
-                                            .padding(.vertical, 8)
-                                            .padding(.horizontal, 16)
-                                            .background(AppColors.gold.opacity(0.15))
-                                            .cornerRadius(20)
+                    
+                    if viewModel.isLoading {
+                        Spacer()
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
+                        Spacer()
+                    } else if viewModel.searchText.isEmpty {
+                        Spacer()
+                        VStack(spacing: 16) {
+                            Spacer().frame(height: 40)
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 60))
+                                .foregroundColor(.gray)
+                                .padding(.bottom, 4)
+                            Text("Start typing to search coins or news")
+                                .foregroundColor(.gray)
+                                .font(.headline)
+                                .padding(.bottom, 8)
+                            CryptoSearchAnimationView(type: animationType)
+                                .environmentObject(viewModel)
+                                .frame(height: 4 * 44 + 3 * 12)
+                        }
+                        .frame(maxWidth: .infinity)
+                        Spacer()
+                    } else if viewModel.filteredCoins.isEmpty && viewModel.filteredNews.isEmpty {
+                        Spacer()
+                        VStack(spacing: 16) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 48))
+                                .foregroundColor(.yellow)
+                            Text("No results found")
+                                .foregroundColor(.gray)
+                                .font(.headline)
+                        }
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 24) {
+                                if !viewModel.filteredCoins.isEmpty {
+                                    Text("Coins")
+                                        .font(.title2.bold())
+                                        .foregroundColor(AppColors.gold)
+                                        .padding(.horizontal)
+                                    ForEach(viewModel.filteredCoins) { coin in
+                                        CoinSearchCard(coin: coin)
+                                            .padding(.horizontal)
                                     }
                                 }
-                                .padding(.horizontal)
-                            }
-                            Text("Popular Categories")
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                                .padding(.horizontal)
-                                .padding(.top, 10)
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                                ForEach(["DeFi", "NFTs", "Metaverse", "GameFi", "Layer-1", "Stablecoins"], id: \.self) { category in
-                                    VStack {
-                                        RoundedRectangle(cornerRadius: 16)
-                                            .fill(
-                                                LinearGradient(
-                                                    gradient: Gradient(colors: [Color(UIColor.darkGray), Color.black]),
-                                                    startPoint: .topLeading,
-                                                    endPoint: .bottomTrailing
-                                                )
-                                            )
-                                            .frame(height: 110)
-                                            .overlay(
-                                                VStack(spacing: 8) {
-                                                    Image(systemName: iconForCategory(category))
-                                                        .font(.system(size: 36))
-                                                        .foregroundColor(AppColors.gold)
-                                                    Text(category)
-                                                        .font(.system(size: 16, weight: .semibold))
-                                                        .foregroundColor(.white)
-                                                }
-                                            )
-                                            .shadow(color: Color.black.opacity(0.3), radius: 5, x: 0, y: 3)
+                                if !viewModel.filteredNews.isEmpty {
+                                    Text("News")
+                                        .font(.title2.bold())
+                                        .foregroundColor(AppColors.gold)
+                                        .padding(.horizontal)
+                                    ForEach(viewModel.filteredNews) { news in
+                                        NewsSearchCard(news: news)
+                                            .padding(.horizontal)
+                                            .onTapGesture {
+                                                selectedNews = news
+                                                showingNewsDetail = true
+                                            }
                                     }
                                 }
                             }
-                            .padding(.horizontal)
+                            .padding(.top)
                         }
                     }
                 }
@@ -163,19 +183,184 @@ struct SearchView: View {
                     }
                 }
             }
+            .onAppear {
+                viewModel.loadInitialData()
+                animationType = .random()
+            }
+            .sheet(isPresented: $showingNewsDetail) {
+                if let news = selectedNews {
+                    NewsDetailView(news: news)
+                }
+            }
         }
     }
-    
-    private func iconForCategory(_ category: String) -> String {
-        switch category {
-            case "DeFi": return "chart.line.uptrend.xyaxis"
-            case "NFTs": return "square.grid.3x3.fill"
-            case "Metaverse": return "headset"
-            case "GameFi": return "gamecontroller.fill"
-            case "Layer-1": return "square.stack.3d.up.fill"
-            case "Stablecoins": return "dollarsign.circle.fill"
-            default: return "questionmark.circle"
+}
+
+// Animasyon tipi enumu
+enum CryptoSearchAnimation {
+    case bouncingLogos
+    static func random() -> CryptoSearchAnimation { .bouncingLogos }
+}
+
+// Animasyon View: 4x4 sabit coin logolu matris (16 farklı coin)
+struct CryptoSearchAnimationView: View {
+    let type: CryptoSearchAnimation
+    @EnvironmentObject var searchViewModel: SearchViewModel
+    // 16 farklı popüler coin için logo URL'leri ve isimleri
+    let coinData: [(name: String, symbol: String, url: String)] = [
+        ("Bitcoin", "BTC", "https://assets.coingecko.com/coins/images/1/large/bitcoin.png"),
+        ("Ethereum", "ETH", "https://assets.coingecko.com/coins/images/279/large/ethereum.png"),
+        ("XRP", "XRP", "https://assets.coingecko.com/coins/images/44/large/xrp-symbol-white-128.png"),
+        ("Dogecoin", "DOGE", "https://assets.coingecko.com/coins/images/5/large/dogecoin.png"),
+        ("Cardano", "ADA", "https://assets.coingecko.com/coins/images/975/large/cardano.png"),
+        ("Binance Coin", "BNB", "https://assets.coingecko.com/coins/images/825/large/binance-coin-logo.png"),
+        ("Solana", "SOL", "https://assets.coingecko.com/coins/images/4128/large/solana.png"),
+        ("USD Coin", "USDC", "https://assets.coingecko.com/coins/images/6319/large/USD_Coin_icon.png"),
+        ("Litecoin", "LTC", "https://assets.coingecko.com/coins/images/2/large/litecoin.png"),
+        ("Polkadot", "DOT", "https://assets.coingecko.com/coins/images/12171/large/polkadot.png"),
+        ("TRON", "TRX", "https://assets.coingecko.com/coins/images/1094/large/tron-logo.png"),
+        ("Avalanche", "AVAX", "https://assets.coingecko.com/coins/images/4685/large/avalanche.png"),
+        ("Chainlink", "LINK", "https://assets.coingecko.com/coins/images/877/large/chainlink-new-logo.png"),
+        ("Polygon", "MATIC", "https://assets.coingecko.com/coins/images/4713/large/matic-token-icon.png"),
+        ("Shiba Inu", "SHIB", "https://assets.coingecko.com/coins/images/11939/large/shiba.png"),
+        ("Uniswap", "UNI", "https://assets.coingecko.com/coins/images/12504/large/uniswap-uni.png"),
+        ("Aptos", "APT", "https://assets.coingecko.com/coins/images/26455/large/aptos_round.png")
+    ]
+    var body: some View {
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
+        LazyVGrid(columns: columns, spacing: 12) {
+            ForEach(0..<16, id: \ .self) { i in
+                let coin = coinData[i]
+                ZStack {
+                    Circle()
+                        .fill(AppColors.gold.opacity(0.13))
+                        .frame(width: 44, height: 44)
+                    AsyncImage(url: URL(string: coin.url)) { phase in
+                        switch phase {
+                        case .empty:
+                            Color.clear.frame(width: 26, height: 26)
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 26, height: 26)
+                        case .failure:
+                            Image(systemName: "questionmark.circle.fill")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 26, height: 26)
+                                .foregroundColor(.gray)
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                }
+                .onTapGesture {
+                    // Kısayol: Coin adına veya sembolüne göre arama
+                    searchViewModel.searchText = coin.symbol
+                }
+                .accessibilityLabel(coin.name)
+            }
         }
+        .frame(height: 4 * 44 + 3 * 12)
+    }
+}
+
+struct CoinSearchCard: View {
+    let coin: Coin
+    var body: some View {
+        HStack(spacing: 12) {
+            if let url = URL(string: coin.image), !coin.image.isEmpty {
+                AsyncImage(url: url) { image in
+                    image.resizable().aspectRatio(contentMode: .fit)
+                } placeholder: {
+                    Image(systemName: "bitcoinsign.circle")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .foregroundColor(.gray.opacity(0.3))
+                }
+                .frame(width: 40, height: 40)
+            } else {
+                Image(systemName: "bitcoinsign.circle")
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .foregroundColor(.gray.opacity(0.3))
+                    .frame(width: 40, height: 40)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(coin.name)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                Text(coin.symbol)
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(coin.formattedPrice)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                Text(coin.formattedChange)
+                    .font(.subheadline)
+                    .foregroundColor(coin.change24h >= 0 ? .green : .red)
+            }
+        }
+        .padding(12)
+        .background(AppColors.darkGray)
+        .cornerRadius(12)
+    }
+}
+
+struct NewsSearchCard: View {
+    let news: NewsService.NewsItem
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            AsyncImage(url: URL(string: news.imageUrl)) { phase in
+                switch phase {
+                case .empty:
+                    Rectangle()
+                        .fill(Color(UIColor.darkGray).opacity(0.3))
+                        .frame(width: 60, height: 60)
+                        .cornerRadius(8)
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 60, height: 60)
+                        .cornerRadius(8)
+                        .clipped()
+                case .failure:
+                    Rectangle()
+                        .fill(Color(UIColor.darkGray).opacity(0.3))
+                        .frame(width: 60, height: 60)
+                        .cornerRadius(8)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .font(.system(size: 24))
+                                .foregroundColor(AppColors.gold)
+                        )
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(news.title)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                Text(news.description)
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .lineLimit(2)
+                Text(news.source)
+                    .font(.caption)
+                    .foregroundColor(AppColors.gold)
+            }
+            Spacer()
+        }
+        .padding(12)
+        .background(AppColors.darkGray)
+        .cornerRadius(12)
     }
 }
 

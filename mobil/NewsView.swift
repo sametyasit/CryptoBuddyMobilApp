@@ -33,6 +33,9 @@ final class NewsService {
     static let shared = NewsService()
     private init() {}
     
+    private let apiKey = "c1086e4db7b5078baef89a7a374128c506a68d2aea26e434640986920610af78" // Replace with your CryptoCompare API key
+    private let baseURL = "https://min-api.cryptocompare.com/data/v2/news/"
+    
     enum NewsCategory: String, CaseIterable {
         case all = "All"
         case trading = "Trading"
@@ -64,20 +67,87 @@ final class NewsService {
     }
     
     func fetchNews(category: NewsCategory = .all, page: Int = 1) async throws -> [NewsItem] {
-        // Simüle edilmiş veri
-        return [
-            NewsItem(
-                id: UUID().uuidString,
-                title: "Sample News Title",
-                description: "This is a sample news description",
-                url: "https://example.com",
-                imageUrl: "https://example.com/image.jpg",
-                publishedAt: Date(),
-                source: "Sample Source",
-                category: category
-            )
+        var urlComponents = URLComponents(string: "\(baseURL)")!
+        var queryItems = [
+            URLQueryItem(name: "api_key", value: apiKey),
+            URLQueryItem(name: "lang", value: "EN")
         ]
+        
+        urlComponents.queryItems = queryItems
+        
+        guard let url = urlComponents.url else {
+            throw NewsError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw NewsError.invalidResponse
+        }
+        
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .secondsSince1970
+            
+            let newsResponse = try decoder.decode(CryptoCompareResponse.self, from: data)
+            
+            // API'den gelen verileri NewsItem'a dönüştür
+            return newsResponse.Data.map { news in
+                NewsItem(
+                    id: news.id,
+                    title: news.title,
+                    description: news.body,
+                    url: news.url,
+                    imageUrl: news.imageurl,
+                    publishedAt: Date(timeIntervalSince1970: TimeInterval(news.published_on)),
+                    source: news.source,
+                    category: determineCategory(from: news.categories)
+                )
+            }
+        } catch {
+            print("Decoding error: \(error)")
+            throw NewsError.decodingError
+        }
     }
+    
+    private func determineCategory(from categories: String) -> NewsCategory {
+        let lowercasedCategories = categories.lowercased()
+        
+        if lowercasedCategories.contains("trading") {
+            return .trading
+        } else if lowercasedCategories.contains("technology") {
+            return .technology
+        } else if lowercasedCategories.contains("regulation") {
+            return .regulation
+        } else if lowercasedCategories.contains("mining") {
+            return .mining
+        } else if lowercasedCategories.contains("defi") {
+            return .defi
+        } else if lowercasedCategories.contains("nft") {
+            return .nft
+        } else if lowercasedCategories.contains("metaverse") {
+            return .metaverse
+        }
+        
+        return .all
+    }
+}
+
+// CryptoCompare API Response Models
+private struct CryptoCompareResponse: Codable {
+    let Data: [CryptoCompareNews]
+}
+
+private struct CryptoCompareNews: Codable {
+    let id: String
+    let title: String
+    let body: String
+    let url: String
+    let imageurl: String
+    let published_on: Int
+    let source: String
+    let categories: String
 }
 
 // MARK: - View Model
@@ -89,45 +159,62 @@ final class NewsViewModel: ObservableObject {
     @Published var error: NewsError?
     @Published var selectedCategory: NewsService.NewsCategory = .all
     @Published var activeSources: Set<String> = []
+    @Published var searchText: String = ""
     
     private let newsService = NewsService.shared
     private var currentPage = 1
+    private var timer: Timer?
     
-    func fetchNews() async {
+    func startAutoRefresh() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
+            Task { await self?.fetchNews(force: true) }
+        }
+    }
+    
+    func stopAutoRefresh() {
+        timer?.invalidate()
+        timer = nil
+    }
+    
+    func fetchNews(force: Bool = false) async {
         await MainActor.run {
             isLoading = true
             error = nil
         }
-        
         do {
-            let news = try await newsService.fetchNews(category: selectedCategory, page: currentPage)
+            let news = try await newsService.fetchNews(category: .all, page: 1)
             await MainActor.run {
                 self.allNews = news
-                self.filteredNews = news
+                self.applyFilters()
                 updateActiveSources()
                 isLoading = false
+                currentPage = 1
+            }
+        } catch let error as NewsError {
+            await MainActor.run {
+                self.error = error
+                self.isLoading = false
             }
         } catch {
             await MainActor.run {
+                self.error = .networkError
                 self.isLoading = false
-                self.error = error as? NewsError ?? .invalidResponse
             }
         }
     }
     
     func loadMoreNews() async {
         guard !isLoadingMore else { return }
-        
         await MainActor.run {
             isLoadingMore = true
             currentPage += 1
         }
-        
         do {
-            let news = try await newsService.fetchNews(category: selectedCategory, page: currentPage)
+            let news = try await newsService.fetchNews(category: .all, page: currentPage)
             await MainActor.run {
                 self.allNews.append(contentsOf: news)
-                self.filteredNews = self.allNews
+                self.applyFilters()
                 updateActiveSources()
                 isLoadingMore = false
             }
@@ -135,26 +222,31 @@ final class NewsViewModel: ObservableObject {
             await MainActor.run {
                 currentPage -= 1
                 isLoadingMore = false
+                self.error = error as? NewsError ?? .networkError
             }
         }
     }
     
-    func filterNews(with searchText: String) {
-        if searchText.isEmpty {
-            filteredNews = allNews
-        } else {
+    func selectCategory(_ category: NewsService.NewsCategory) {
+        selectedCategory = category
+        applyFilters()
+    }
+    
+    func updateSearchText(_ text: String) {
+        searchText = text
+        applyFilters()
+    }
+    
+    private func applyFilters() {
+        if !searchText.isEmpty {
             filteredNews = allNews.filter { news in
                 news.title.localizedCaseInsensitiveContains(searchText) ||
                 news.description.localizedCaseInsensitiveContains(searchText)
             }
-        }
-    }
-    
-    func filterNews(by category: NewsService.NewsCategory) {
-        if category == .all {
-            filteredNews = allNews
+        } else if selectedCategory != .all {
+            filteredNews = allNews.filter { $0.category == selectedCategory }
         } else {
-            filteredNews = allNews.filter { $0.category == category }
+            filteredNews = allNews
         }
     }
     
@@ -168,14 +260,14 @@ struct NewsView: View {
     @StateObject private var viewModel = NewsViewModel()
     @State private var showingSafari = false
     @State private var selectedNewsURL: URL?
-    @State private var searchText = ""
-    @State private var selectedCategory: NewsService.NewsCategory = .all
     @State private var showError = false
+    @State private var showingNewsDetail = false
+    @State private var selectedNews: NewsService.NewsItem?
     
     var body: some View {
         NavigationView {
             ZStack {
-                Color(.systemBackground).edgesIgnoringSafeArea(.all)
+                Color.black.edgesIgnoringSafeArea(.all)
                 
                 VStack(spacing: 0) {
                     // Kategori seçici
@@ -184,12 +276,9 @@ struct NewsView: View {
                             ForEach(NewsService.NewsCategory.allCases, id: \.self) { category in
                                 CategoryButton(
                                     title: category.rawValue,
-                                    isSelected: selectedCategory == category
+                                    isSelected: viewModel.selectedCategory == category
                                 ) {
-                                    selectedCategory = category
-                                    Task {
-                                        await viewModel.fetchNews()
-                                    }
+                                    viewModel.selectCategory(category)
                                 }
                             }
                         }
@@ -202,16 +291,16 @@ struct NewsView: View {
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(.gray)
                         
-                        TextField("Search news...", text: $searchText)
-                            .textFieldStyle(PlainTextFieldStyle())
-                            .onChange(of: searchText) { _ in
-                                viewModel.filterNews(with: searchText)
-                            }
+                        TextField("Search news...", text: Binding(
+                            get: { viewModel.searchText },
+                            set: { viewModel.updateSearchText($0) }
+                        ))
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .foregroundColor(.white)
                         
-                        if !searchText.isEmpty {
+                        if !viewModel.searchText.isEmpty {
                             Button(action: {
-                                searchText = ""
-                                viewModel.filterNews(with: "")
+                                viewModel.updateSearchText("")
                             }) {
                                 Image(systemName: "xmark.circle.fill")
                                     .foregroundColor(.gray)
@@ -219,101 +308,265 @@ struct NewsView: View {
                         }
                     }
                     .padding()
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(10)
+                    .background(Color(UIColor.darkGray).opacity(0.3))
+                    .cornerRadius(15)
                     .padding(.horizontal)
-                    
-                    // API kaynakları
-                    if !viewModel.filteredNews.isEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
-                                Text("Sources:")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                ForEach(Array(viewModel.activeSources), id: \.self) { source in
-                                    Text(source)
-                                        .font(.caption)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 4)
-                                        .background(Color.blue.opacity(0.1))
-                                        .cornerRadius(8)
-                                }
-                            }
-                            .padding(.horizontal)
-                        }
-                        .padding(.top, 8)
-                    }
                     
                     // Haber listesi
                     ScrollView {
                         LazyVStack(spacing: 16) {
                             ForEach(viewModel.filteredNews) { news in
-                                NewsCard(newsItem: news)
+                                NewsCard(news: news)
                                     .onTapGesture {
-                                        if let url = URL(string: news.url) {
-                                            selectedNewsURL = url
-                                            showingSafari = true
+                                        selectedNews = news
+                                        showingNewsDetail = true
+                                    }
+                                    .onAppear {
+                                        if news == viewModel.filteredNews.last {
+                                            Task {
+                                                await viewModel.loadMoreNews()
+                                            }
                                         }
                                     }
                             }
                             
                             if viewModel.isLoadingMore {
                                 ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
                                     .padding()
                             }
                         }
                         .padding()
                     }
-                    .refreshable {
-                        await viewModel.fetchNews()
-                    }
-                }
-                
-                // Yükleniyor göstergesi
-                if viewModel.isLoading && viewModel.filteredNews.isEmpty {
-                    ProgressView()
-                        .scaleEffect(1.5)
-                }
-                
-                // Hata mesajı
-                if let error = viewModel.error {
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 50))
-                            .foregroundColor(.red)
-                        
-                        Text(error.localizedDescription)
-                            .multilineTextAlignment(.center)
-                        
-                        Button("Try Again") {
-                            Task {
-                                await viewModel.fetchNews()
-                            }
-                        }
-                        .foregroundColor(.blue)
-                    }
-                    .padding()
                 }
             }
-            .navigationTitle("Crypto News")
+            .navigationTitle("News")
             .navigationBarTitleDisplayMode(.inline)
-        }
-        .sheet(isPresented: $showingSafari) {
-            if let url = selectedNewsURL {
-                SafariView(url: url)
+            .sheet(isPresented: $showingNewsDetail) {
+                if let news = selectedNews {
+                    NewsDetailView(news: news)
+                }
             }
-        }
-        .onAppear {
-            if viewModel.filteredNews.isEmpty {
+            .overlay {
+                if viewModel.isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
+                }
+            }
+            .onAppear {
                 Task {
                     await viewModel.fetchNews()
+                }
+                viewModel.startAutoRefresh()
+            }
+            .onDisappear {
+                viewModel.stopAutoRefresh()
+            }
+            .alert("Error", isPresented: $showError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                if let error = viewModel.error {
+                    Text(error.localizedDescription)
                 }
             }
         }
     }
 }
 
-// MARK: - Supporting Views
+struct NewsCard: View {
+    let news: NewsService.NewsItem
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Haber görseli
+            AsyncImage(url: URL(string: news.imageUrl)) { phase in
+                switch phase {
+                case .empty:
+                    Rectangle()
+                        .fill(Color(UIColor.darkGray).opacity(0.3))
+                        .frame(height: 200)
+                        .overlay(
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
+                        )
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 200)
+                        .clipped()
+                case .failure:
+                    Rectangle()
+                        .fill(Color(UIColor.darkGray).opacity(0.3))
+                        .frame(height: 200)
+                        .overlay(
+                            Image(systemName: "photo")
+                                .font(.system(size: 40))
+                                .foregroundColor(AppColors.gold)
+                        )
+                @unknown default:
+                    EmptyView()
+                }
+            }
+            .cornerRadius(16)
+            
+            // Haber başlığı
+            Text(news.title)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.white)
+                .lineLimit(2)
+            
+            // Haber açıklaması
+            Text(news.description)
+                .font(.system(size: 14))
+                .foregroundColor(.gray)
+                .lineLimit(3)
+            
+            HStack {
+                // Kaynak ve tarih
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(news.source)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(AppColors.gold)
+                    
+                    Text(news.publishedAt, style: .relative)
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+                
+                // Kategori etiketi
+                Text(news.category.rawValue)
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(AppColors.gold.opacity(0.2))
+                    .foregroundColor(AppColors.gold)
+                    .cornerRadius(8)
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(UIColor.darkGray).opacity(0.3))
+        )
+    }
+}
+
+struct NewsDetailView: View {
+    let news: NewsService.NewsItem
+    @Environment(\.presentationMode) var presentationMode
+    @State private var showingSafari = false
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Haber görseli
+                    AsyncImage(url: URL(string: news.imageUrl)) { phase in
+                        switch phase {
+                        case .empty:
+                            Rectangle()
+                                .fill(Color(UIColor.darkGray).opacity(0.3))
+                                .frame(height: 250)
+                                .overlay(
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
+                                )
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(height: 250)
+                                .clipped()
+                        case .failure:
+                            Rectangle()
+                                .fill(Color(UIColor.darkGray).opacity(0.3))
+                                .frame(height: 250)
+                                .overlay(
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 50))
+                                        .foregroundColor(AppColors.gold)
+                                )
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                    .cornerRadius(16)
+                    
+                    // Haber başlığı
+                    Text(news.title)
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    // Kaynak ve tarih
+                    HStack {
+                        Text(news.source)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(AppColors.gold)
+                        
+                        Spacer()
+                        
+                        Text(news.publishedAt, style: .relative)
+                            .font(.system(size: 14))
+                            .foregroundColor(.gray)
+                    }
+                    
+                    // Kategori etiketi
+                    Text(news.category.rawValue)
+                        .font(.system(size: 14, weight: .medium))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(AppColors.gold.opacity(0.2))
+                        .foregroundColor(AppColors.gold)
+                        .cornerRadius(8)
+                    
+                    // Haber açıklaması
+                    Text(news.description)
+                        .font(.system(size: 16))
+                        .foregroundColor(.white)
+                        .lineSpacing(8)
+                    
+                    // Haber linki
+                    Button(action: {
+                        showingSafari = true
+                    }) {
+                        HStack {
+                            Text("Read Full Article")
+                                .font(.system(size: 16, weight: .medium))
+                            Image(systemName: "arrow.up.right")
+                        }
+                        .foregroundColor(AppColors.gold)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(AppColors.gold.opacity(0.1))
+                        )
+                    }
+                }
+                .padding()
+            }
+            .background(Color.black.edgesIgnoringSafeArea(.all))
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarItems(
+                leading: Button(action: {
+                    presentationMode.wrappedValue.dismiss()
+                }) {
+                    Image(systemName: "xmark")
+                        .foregroundColor(.white)
+                }
+            )
+            .sheet(isPresented: $showingSafari) {
+                if let url = URL(string: news.url) {
+                    SafariView(url: url)
+                }
+            }
+        }
+    }
+}
+
 struct CategoryButton: View {
     let title: String
     let isSelected: Bool
@@ -323,62 +576,14 @@ struct CategoryButton: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 14, weight: .medium))
-                .foregroundColor(isSelected ? .white : .secondary)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .background(isSelected ? Color.blue : Color(.secondarySystemBackground))
-                .cornerRadius(20)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(isSelected ? AppColors.gold : Color(UIColor.darkGray).opacity(0.3))
+                )
+                .foregroundColor(isSelected ? .black : .white)
         }
-    }
-}
-
-struct NewsCard: View {
-    let newsItem: NewsService.NewsItem
-    
-    var body: some View {
-        Link(destination: URL(string: newsItem.url)!) {
-            VStack(alignment: .leading, spacing: 8) {
-                AsyncImage(url: URL(string: newsItem.imageUrl)) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Rectangle()
-                        .fill(Color.gray.opacity(0.2))
-                }
-                .frame(height: 200)
-                .clipped()
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(newsItem.title)
-                        .font(.headline)
-                        .lineLimit(2)
-                    
-                    Text(newsItem.description)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .lineLimit(3)
-                    
-                    HStack {
-                        Text(newsItem.source)
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                        
-                        Spacer()
-                        
-                        Text(newsItem.publishedAt, style: .relative)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.horizontal, 8)
-                .padding(.bottom, 8)
-            }
-            .background(Color(.systemBackground))
-            .cornerRadius(10)
-            .shadow(radius: 3)
-        }
-        .buttonStyle(PlainButtonStyle())
     }
 }
 
@@ -395,3 +600,9 @@ struct SafariView: UIViewControllerRepresentable {
 #Preview {
     NewsView()
 } 
+
+
+
+
+
+

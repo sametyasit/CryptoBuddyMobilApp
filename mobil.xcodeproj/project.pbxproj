@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1109989D2DBF7B6B000BBCD0 /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1109989C2DBF7B6B000BBCD0 /* SearchViewModel.swift */; };
 		11518DF32DA64CE8009476B9 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 11518DE02DA64CE8009476B9 /* Assets.xcassets */; };
 		11518DF52DA64CE8009476B9 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 11518DE82DA64CE8009476B9 /* LaunchScreen.storyboard */; };
 		11518DF62DA64CE8009476B9 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 11518DEB2DA64CE8009476B9 /* Main.storyboard */; };
@@ -28,6 +29,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		1109989C2DBF7B6B000BBCD0 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
 		110EF2812D9EB3FE007622B0 /* mobil.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = mobil.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		11518DDC2DA64CE8009476B9 /* NewsItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewsItem.swift; sourceTree = "<group>"; };
 		11518DDE2DA64CE8009476B9 /* APIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIService.swift; sourceTree = "<group>"; };
@@ -104,6 +106,7 @@
 				11518DEC2DA64CE8009476B9 /* MainTabView.swift */,
 				11518DED2DA64CE8009476B9 /* NewsView.swift */,
 				11518DEE2DA64CE8009476B9 /* ProfileView.swift */,
+				1109989C2DBF7B6B000BBCD0 /* SearchViewModel.swift */,
 				11518DEF2DA64CE8009476B9 /* SceneDelegate.swift */,
 				11518DF02DA64CE8009476B9 /* SignUpView.swift */,
 				11518DF12DA64CE8009476B9 /* ViewController.swift */,
@@ -187,6 +190,7 @@
 			files = (
 				11518DF72DA64CE8009476B9 /* NewsItem.swift in Sources */,
 				11518DF82DA64CE8009476B9 /* APIService.swift in Sources */,
+				1109989D2DBF7B6B000BBCD0 /* SearchViewModel.swift in Sources */,
 				11518DF92DA64CE8009476B9 /* AppDelegate.swift in Sources */,
 				11518DFA2DA64CE8009476B9 /* Coin.swift in Sources */,
 				11518DFB2DA64CE8009476B9 /* CoinListView.swift in Sources */,
