@@ -1,15 +1,17 @@
 import SwiftUI
 import Combine
 
+// Burada tanımlanan NewsItem silindi, projede zaten var
+
 class SearchViewModel: ObservableObject {
     @Published var searchText: String = ""
     @Published var filteredCoins: [Coin] = []
-    @Published var filteredNews: [NewsService.NewsItem] = []
+    @Published var filteredNews: [NewsItem] = []
     @Published var isLoading: Bool = false
     @Published var error: String? = nil
     
     private var allCoins: [Coin] = []
-    private var allNews: [NewsService.NewsItem] = []
+    private var allNews: [NewsItem] = []
     private var coinsLoaded = false
     private var newsLoaded = false
     private var cancellables = Set<AnyCancellable>()
@@ -27,7 +29,7 @@ class SearchViewModel: ObservableObject {
     func loadInitialData() {
         Task {
             await fetchCoins()
-            await fetchNews()
+            await fetchDemoNews()
         }
     }
     
@@ -46,16 +48,36 @@ class SearchViewModel: ObservableObject {
     }
     
     @MainActor
-    func fetchNews() async {
+    func fetchDemoNews() async {
         isLoading = true
-        do {
-            let news = try await NewsService.shared.fetchNews(category: .all, page: 1)
-            self.allNews = news
-            self.newsLoaded = true
-            self.applyFilters()
-        } catch {
-            self.error = error.localizedDescription
-        }
+        
+        // Demo haberler oluştur (Date -> String formatında)
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime]
+        
+        self.allNews = [
+            NewsItem(
+                id: "1",
+                title: "Bitcoin Yeni Bir Rekora İmza Attı",
+                description: "Bitcoin, son 24 saatte %5 yükselerek yeni bir rekor kırdı.",
+                url: "https://example.com/news/1",
+                imageUrl: "https://example.com/images/bitcoin.jpg",
+                source: "Crypto News",
+                publishedAt: dateFormatter.string(from: Date())
+            ),
+            NewsItem(
+                id: "2",
+                title: "Ethereum 2.0 Güncellemesi",
+                description: "Ethereum ekosistemi, yeni bir güncelleme ile daha verimli hale geliyor.",
+                url: "https://example.com/news/2",
+                imageUrl: "https://example.com/images/ethereum.jpg",
+                source: "DeFi News", 
+                publishedAt: dateFormatter.string(from: Date().addingTimeInterval(-86400))
+            )
+        ]
+        
+        self.newsLoaded = true
+        self.applyFilters()
         isLoading = false
     }
     
