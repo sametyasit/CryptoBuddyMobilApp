@@ -29,8 +29,8 @@ enum NewsError: Error {
 }
 
 // MARK: - News Service
-final class NewsService {
-    static let shared = NewsService()
+final class NewsServiceImpl {
+    static let shared = NewsServiceImpl()
     private init() {}
     
     private let apiKey = "c1086e4db7b5078baef89a7a374128c506a68d2aea26e434640986920610af78" // Replace with your CryptoCompare API key
@@ -152,16 +152,16 @@ private struct CryptoCompareNews: Codable {
 
 // MARK: - View Model
 final class NewsViewModel: ObservableObject {
-    @Published var allNews: [NewsService.NewsItem] = []
-    @Published var filteredNews: [NewsService.NewsItem] = []
+    @Published var allNews: [NewsServiceImpl.NewsItem] = []
+    @Published var filteredNews: [NewsServiceImpl.NewsItem] = []
     @Published var isLoading = false
     @Published var isLoadingMore = false
     @Published var error: NewsError?
-    @Published var selectedCategory: NewsService.NewsCategory = .all
+    @Published var selectedCategory: NewsServiceImpl.NewsCategory = .all
     @Published var activeSources: Set<String> = []
     @Published var searchText: String = ""
     
-    private let newsService = NewsService.shared
+    private let newsService = NewsServiceImpl.shared
     private var currentPage = 1
     private var timer: Timer?
     
@@ -227,7 +227,7 @@ final class NewsViewModel: ObservableObject {
         }
     }
     
-    func selectCategory(_ category: NewsService.NewsCategory) {
+    func selectCategory(_ category: NewsServiceImpl.NewsCategory) {
         selectedCategory = category
         applyFilters()
     }
@@ -262,7 +262,7 @@ struct NewsView: View {
     @State private var selectedNewsURL: URL?
     @State private var showError = false
     @State private var showingNewsDetail = false
-    @State private var selectedNews: NewsService.NewsItem?
+    @State private var selectedNews: NewsServiceImpl.NewsItem?
     
     var body: some View {
         NavigationView {
@@ -273,7 +273,7 @@ struct NewsView: View {
                     // Kategori seçici
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
-                            ForEach(NewsService.NewsCategory.allCases, id: \.self) { category in
+                            ForEach(NewsServiceImpl.NewsCategory.allCases, id: \.self) { category in
                                 CategoryButton(
                                     title: category.rawValue,
                                     isSelected: viewModel.selectedCategory == category
@@ -332,7 +332,7 @@ struct NewsView: View {
                             
                             if viewModel.isLoadingMore {
                                 ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
+                                    .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
                                     .padding()
                             }
                         }
@@ -349,8 +349,13 @@ struct NewsView: View {
             }
             .overlay {
                 if viewModel.isLoading {
+                    Spacer()
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
+                        .scaleEffect(1.5)
+                    Spacer()
+                } else {
+                    // ... existing code ...
                 }
             }
             .onAppear {
@@ -374,7 +379,7 @@ struct NewsView: View {
 }
 
 struct NewsCard: View {
-    let news: NewsService.NewsItem
+    let news: NewsServiceImpl.NewsItem
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -387,7 +392,7 @@ struct NewsCard: View {
                         .frame(height: 200)
                         .overlay(
                             ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
+                                .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
                         )
                 case .success(let image):
                     image
@@ -402,7 +407,7 @@ struct NewsCard: View {
                         .overlay(
                             Image(systemName: "photo")
                                 .font(.system(size: 40))
-                                .foregroundColor(AppColors.gold)
+                                .foregroundColor(AppColorsTheme.gold)
                         )
                 @unknown default:
                     EmptyView()
@@ -427,7 +432,7 @@ struct NewsCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(news.source)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(AppColors.gold)
+                        .foregroundColor(AppColorsTheme.gold)
                     
                     Text(news.publishedAt, style: .relative)
                         .font(.system(size: 12))
@@ -441,8 +446,8 @@ struct NewsCard: View {
                     .font(.system(size: 12, weight: .medium))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(AppColors.gold.opacity(0.2))
-                    .foregroundColor(AppColors.gold)
+                    .background(AppColorsTheme.gold.opacity(0.2))
+                    .foregroundColor(AppColorsTheme.gold)
                     .cornerRadius(8)
             }
         }
@@ -455,7 +460,7 @@ struct NewsCard: View {
 }
 
 struct NewsDetailView: View {
-    let news: NewsService.NewsItem
+    let news: NewsServiceImpl.NewsItem
     @Environment(\.presentationMode) var presentationMode
     @State private var showingSafari = false
     
@@ -472,7 +477,7 @@ struct NewsDetailView: View {
                                 .frame(height: 250)
                                 .overlay(
                                     ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
+                                        .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
                                 )
                         case .success(let image):
                             image
@@ -487,7 +492,7 @@ struct NewsDetailView: View {
                                 .overlay(
                                     Image(systemName: "photo")
                                         .font(.system(size: 50))
-                                        .foregroundColor(AppColors.gold)
+                                        .foregroundColor(AppColorsTheme.gold)
                                 )
                         @unknown default:
                             EmptyView()
@@ -504,7 +509,7 @@ struct NewsDetailView: View {
                     HStack {
                         Text(news.source)
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(AppColors.gold)
+                            .foregroundColor(AppColorsTheme.gold)
                         
                         Spacer()
                         
@@ -518,8 +523,8 @@ struct NewsDetailView: View {
                         .font(.system(size: 14, weight: .medium))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
-                        .background(AppColors.gold.opacity(0.2))
-                        .foregroundColor(AppColors.gold)
+                        .background(AppColorsTheme.gold.opacity(0.2))
+                        .foregroundColor(AppColorsTheme.gold)
                         .cornerRadius(8)
                     
                     // Haber açıklaması
@@ -537,12 +542,12 @@ struct NewsDetailView: View {
                                 .font(.system(size: 16, weight: .medium))
                             Image(systemName: "arrow.up.right")
                         }
-                        .foregroundColor(AppColors.gold)
+                        .foregroundColor(AppColorsTheme.gold)
                         .padding()
                         .frame(maxWidth: .infinity)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
-                                .fill(AppColors.gold.opacity(0.1))
+                                .fill(AppColorsTheme.gold.opacity(0.1))
                         )
                     }
                 }
@@ -580,7 +585,7 @@ struct CategoryButton: View {
                 .padding(.vertical, 8)
                 .background(
                     RoundedRectangle(cornerRadius: 20)
-                        .fill(isSelected ? AppColors.gold : Color(UIColor.darkGray).opacity(0.3))
+                        .fill(isSelected ? AppColorsTheme.gold : Color(UIColor.darkGray).opacity(0.3))
                 )
                 .foregroundColor(isSelected ? .black : .white)
         }
