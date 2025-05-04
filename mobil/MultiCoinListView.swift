@@ -1,7 +1,11 @@
 import SwiftUI
+import Charts
+import Foundation
 
 struct MultiCoinListView: View {
     @StateObject private var viewModel = MultiCoinViewModel()
+    @State private var selectedCoinId: String? = nil
+    @State private var showCoinDetail = false
     
     var body: some View {
         ZStack {
@@ -56,9 +60,15 @@ struct MultiCoinListView: View {
                     ScrollView {
                         LazyVStack(spacing: 0) {
                             ForEach(viewModel.allCoins) { coin in
-                                CoinRow(coin: coin)
-                                    .padding(.horizontal)
-                                    .padding(.vertical, 6)
+                                Button(action: {
+                                    selectedCoinId = coin.id
+                                    showCoinDetail = true
+                                }) {
+                                    CoinRow(coin: coin)
+                                        .padding(.horizontal)
+                                        .padding(.vertical, 6)
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
                             
                             if !viewModel.isLoadingMore && !viewModel.isRefreshing {
@@ -137,6 +147,13 @@ struct MultiCoinListView: View {
                 viewModel.refreshCoins()
             }
         }
+        .fullScreenCover(isPresented: $showCoinDetail) {
+            if let coinId = selectedCoinId {
+                NavigationView {
+                    TemporaryCoinDetailView(coinId: coinId)
+                }
+            }
+        }
     }
 }
 
@@ -152,13 +169,29 @@ struct CoinRow: View {
                     .foregroundColor(.gray)
                     .frame(width: 30, alignment: .center)
                 
-                AsyncImage(url: URL(string: coin.image)) { image in
-                    image
-                        .resizable()
-                        .scaledToFit()
-                } placeholder: {
-                    Circle()
-                        .fill(Color.gray.opacity(0.2))
+                CachedAsyncImage(url: URL(string: coin.image)) { phase in
+                    switch phase {
+                    case .empty:
+                        Circle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 30, height: 30)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 30, height: 30)
+                    case .failure:
+                        Circle()
+                            .fill(Color.gray.opacity(0.2))
+                            .frame(width: 30, height: 30)
+                            .overlay(
+                                Image(systemName: "questionmark")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.gray)
+                            )
+                    @unknown default:
+                        EmptyView()
+                    }
                 }
                 .frame(width: 30, height: 30)
                 
@@ -182,10 +215,16 @@ struct CoinRow: View {
                 .frame(width: 100, alignment: .trailing)
             
             // 24h Change
-            Text(coin.formattedChange)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(coin.change24h >= 0 ? .green : .red)
-                .frame(width: 80, alignment: .trailing)
+            HStack(spacing: 2) {
+                Image(systemName: coin.change24h >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                    .font(.system(size: 10))
+                    .foregroundColor(coin.change24h >= 0 ? .green : .red)
+                
+                Text(coin.formattedChange)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(coin.change24h >= 0 ? .green : .red)
+            }
+            .frame(width: 80, alignment: .trailing)
         }
         .padding(.vertical, 4)
     }
