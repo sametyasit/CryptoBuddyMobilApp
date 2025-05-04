@@ -327,11 +327,17 @@ class APIService {
 
 // MARK: - Models
 
-enum APIError: Error {
+enum APIError: Error, Equatable {
     case invalidURL
     case invalidResponse
     case decodingError
     case allAPIsFailed
+}
+
+// Define the operator function to fix the "Referencing operator function '~='" error
+func ~= (left: APIError, right: Error) -> Bool {
+    guard let right = right as? APIError else { return false }
+    return left == right
 }
 
 // Coin Models
