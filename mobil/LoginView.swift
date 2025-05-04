@@ -19,7 +19,7 @@ struct LoginView: View {
                     Text("CryptoBuddy")
                         .font(.largeTitle)
                         .fontWeight(.bold)
-                        .foregroundColor(AppColors.gold)
+                        .foregroundColor(AppColorsTheme.gold)
                         .padding(.top, 50)
                     
                     Spacer()
@@ -52,7 +52,7 @@ struct LoginView: View {
                             showingForgotPassword = true
                         }) {
                             Text("Şifremi unuttum")
-                                .foregroundColor(AppColors.gold)
+                                .foregroundColor(AppColorsTheme.gold)
                                 .font(.footnote)
                                 .underline()
                         }
@@ -73,7 +73,7 @@ struct LoginView: View {
                                 .fontWeight(.bold)
                                 .frame(maxWidth: .infinity)
                                 .padding()
-                                .background(AppColors.gold)
+                                .background(AppColorsTheme.gold)
                                 .cornerRadius(10)
                         }
                     }
@@ -90,7 +90,7 @@ struct LoginView: View {
                             showingSignUp = true
                         }) {
                             Text("Hesap Oluştur")
-                                .foregroundColor(AppColors.gold)
+                                .foregroundColor(AppColorsTheme.gold)
                                 .underline()
                         }
                     }
@@ -105,7 +105,7 @@ struct LoginView: View {
                     Image(systemName: "chevron.left")
                     Text("Back")
                 }
-                .foregroundColor(AppColors.gold)
+                .foregroundColor(AppColorsTheme.gold)
             })
             .alert(isPresented: $showingAlert) {
                 Alert(
@@ -167,7 +167,7 @@ struct ForgotPasswordView: View {
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(AppColors.gold)
+                            .background(AppColorsTheme.gold)
                             .cornerRadius(10)
                     }
                     .padding(.horizontal)
@@ -177,7 +177,7 @@ struct ForgotPasswordView: View {
                 presentationMode.wrappedValue.dismiss()
             }) {
                 Image(systemName: "xmark")
-                    .foregroundColor(AppColors.gold)
+                    .foregroundColor(AppColorsTheme.gold)
             })
             .alert(isPresented: $showingAlert) {
                 Alert(
