@@ -1,4 +1,6 @@
 import SwiftUI
+import Charts
+import Foundation
 
 struct CoinListView: View {
     @State private var coins: [Coin] = []
@@ -7,6 +9,8 @@ struct CoinListView: View {
     @State private var errorMessage: String?
     @State private var showError = false
     @State private var currentAPI = "CoinGecko"
+    @State private var selectedCoinId: String? = nil
+    @State private var showCoinDetail = false
     
     var body: some View {
         ZStack {
@@ -23,9 +27,15 @@ struct CoinListView: View {
                 
                 List {
                     ForEach(coins) { coin in
-                        CoinRow(coin: coin)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
+                        Button(action: {
+                            selectedCoinId = coin.id
+                            showCoinDetail = true
+                        }) {
+                            CoinRow(coin: coin)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                        }
+                        .buttonStyle(PlainButtonStyle())
                     }
                     
                     if !coins.isEmpty {
@@ -33,7 +43,7 @@ struct CoinListView: View {
                             Spacer()
                             Button(action: loadMoreCoins) {
                                 Text("Load More")
-                                    .foregroundColor(AppColors.gold)
+                                    .foregroundColor(AppColorsTheme.gold)
                                     .padding()
                             }
                             Spacer()
@@ -41,7 +51,7 @@ struct CoinListView: View {
                         .listRowBackground(Color.clear)
                     }
                 }
-                .background(AppColors.black)
+                .background(AppColorsTheme.black)
                 .listStyle(PlainListStyle())
                 .refreshable {
                     currentPage = 1
@@ -52,7 +62,7 @@ struct CoinListView: View {
             if isLoading && coins.isEmpty {
                 ProgressView()
                     .scaleEffect(1.5)
-                    .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
+                    .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
             }
         }
         .alert("Error", isPresented: $showError) {
@@ -69,6 +79,13 @@ struct CoinListView: View {
         .onAppear {
             if coins.isEmpty {
                 loadCoins()
+            }
+        }
+        .fullScreenCover(isPresented: $showCoinDetail) {
+            if let coinId = selectedCoinId {
+                NavigationView {
+                    TemporaryCoinDetailView(coinId: coinId)
+                }
             }
         }
     }
@@ -130,15 +147,25 @@ struct CoinRow: View {
             
             // Coin logo
             if let url = URL(string: coin.image), !coin.image.isEmpty {
-                AsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                } placeholder: {
-                    Image(systemName: "bitcoinsign.circle")
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .foregroundColor(.gray.opacity(0.3))
+                CachedAsyncImage(url: url) { phase in
+                    switch phase {
+                    case .empty:
+                        Image(systemName: "bitcoinsign.circle")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .foregroundColor(.gray.opacity(0.3))
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    case .failure:
+                        Image(systemName: "bitcoinsign.circle")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .foregroundColor(.gray.opacity(0.3))
+                    @unknown default:
+                        EmptyView()
+                    }
                 }
                 .frame(width: 32, height: 32)
             } else {
@@ -166,15 +193,23 @@ struct CoinRow: View {
                 Text(coin.formattedPrice)
                     .font(.headline)
                     .foregroundColor(.white)
-                Text(coin.formattedChange)
-                    .font(.subheadline)
-                    .foregroundColor(coin.change24h >= 0 ? .green : .red)
+                HStack(spacing: 4) {
+                    Image(systemName: coin.change24h >= 0 ? "arrow.up.right" : "arrow.down.right")
+                        .font(.caption)
+                        .foregroundColor(coin.change24h >= 0 ? .green : .red)
+                    Text(coin.formattedChange)
+                        .font(.subheadline)
+                        .foregroundColor(coin.change24h >= 0 ? .green : .red)
+                }
             }
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)
-        .background(AppColors.darkGray)
-        .cornerRadius(8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(AppColorsTheme.darkGray)
+                .shadow(color: Color.black.opacity(0.3), radius: 2, x: 0, y: 1)
+        )
     }
 }
 
