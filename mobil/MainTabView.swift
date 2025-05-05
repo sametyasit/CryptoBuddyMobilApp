@@ -40,6 +40,7 @@ struct CachedAsyncImage<Content: View>: View {
     private let content: (AsyncImagePhase) -> Content
     @State private var loadedImage: UIImage? = nil
     @State private var isLoading = false
+    @State private var loadTask: Task<Void, Never>? = nil
     
     init(url: URL?, scale: CGFloat = 1.0, transaction: Transaction = Transaction(), @ViewBuilder content: @escaping (AsyncImagePhase) -> Content) {
         self.url = url
@@ -58,39 +59,53 @@ struct CachedAsyncImage<Content: View>: View {
                 content(.empty)
                     .onAppear {
                         if !isLoading {
-                            loadImage()
+                            startLoading()
                         }
+                    }
+                    .onDisappear {
+                        cancelLoading()
                     }
             }
         }
     }
     
-    private func getCachedImage() -> UIImage? {
-        guard let url = url else { return nil }
-        return ImageCache.shared.get(forKey: url.absoluteString)
-    }
-    
-    private func loadImage() {
-        guard let url = url else { return }
+    private func startLoading() {
+        guard let url = url, loadTask == nil else { return }
         isLoading = true
         
-        Task {
+        loadTask = Task {
             do {
+                // Düşük öncelikli yükleme
+                try await Task.sleep(nanoseconds: 50_000_000) // 50ms gecikme
+                
                 let (data, _) = try await URLSession.shared.data(from: url)
                 if let image = UIImage(data: data) {
                     ImageCache.shared.set(image, forKey: url.absoluteString)
                     await MainActor.run {
                         loadedImage = image
                         isLoading = false
+                        loadTask = nil
                     }
                 }
             } catch {
                 print("Failed to load image: \(error)")
                 await MainActor.run {
                     isLoading = false
+                    loadTask = nil
                 }
             }
         }
+    }
+    
+    private func cancelLoading() {
+        loadTask?.cancel()
+        loadTask = nil
+        isLoading = false
+    }
+    
+    private func getCachedImage() -> UIImage? {
+        guard let url = url else { return nil }
+        return ImageCache.shared.get(forKey: url.absoluteString)
     }
 }
 
@@ -161,15 +176,91 @@ class SearchViewModelLight: ObservableObject {
         "Uniswap": "https://assets.coingecko.com/coins/images/12504/large/uniswap-uni.png"
     ]
     
+    // Önbellek kontrolü için tarih
+    private var lastCoinFetchTime: Date? = nil
+    private var lastNewsFetchTime: Date? = nil
+    private let refreshInterval: TimeInterval = 60 // 60 saniye
+    
+    init() {
+        // App açılışında UserDefaults'tan kayıtlı verileri yükleme
+        loadCachedData()
+    }
+    
     func loadInitialData() {
-        isLoading = true
-        Task {
-            await fetchCoins()
-            await fetchNews()
-            
-            DispatchQueue.main.async {
-                self.isLoading = false
+        if shouldRefreshCoins() || coins.isEmpty {
+            isLoading = true
+            Task {
+                await fetchCoins()
+                await fetchNews()
+                
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                }
             }
+        } else {
+            // Sadece coin isimlerini ve logoları güncelle
+            updateCoinNamesAndLogos()
+        }
+    }
+    
+    private func shouldRefreshCoins() -> Bool {
+        guard let lastFetch = lastCoinFetchTime else { return true }
+        return Date().timeIntervalSince(lastFetch) > refreshInterval
+    }
+    
+    private func shouldRefreshNews() -> Bool {
+        guard let lastFetch = lastNewsFetchTime else { return true }
+        return Date().timeIntervalSince(lastFetch) > refreshInterval
+    }
+    
+    private func loadCachedData() {
+        // UserDefaults'tan veri yükleme
+        if let coinsData = UserDefaults.standard.data(forKey: "cachedCoins"),
+           let cachedCoins = try? JSONDecoder().decode([Coin].self, from: coinsData) {
+            self.coins = cachedCoins
+            updateCoinNamesAndLogos()
+        }
+        
+        if let newsData = UserDefaults.standard.data(forKey: "cachedNews"),
+           let cachedNews = try? JSONDecoder().decode([NewsItem].self, from: newsData) {
+            self.news = cachedNews
+        }
+        
+        // Son yükleme tarihlerini al
+        if let lastCoinsTimeStamp = UserDefaults.standard.object(forKey: "lastCoinFetchTime") as? Date {
+            self.lastCoinFetchTime = lastCoinsTimeStamp
+        }
+        
+        if let lastNewsTimeStamp = UserDefaults.standard.object(forKey: "lastNewsFetchTime") as? Date {
+            self.lastNewsFetchTime = lastNewsTimeStamp
+        }
+    }
+    
+    private func cacheData() {
+        // Coin verilerini önbelleğe kaydet
+        if !coins.isEmpty, let encodedCoins = try? JSONEncoder().encode(coins) {
+            UserDefaults.standard.set(encodedCoins, forKey: "cachedCoins")
+            UserDefaults.standard.set(Date(), forKey: "lastCoinFetchTime")
+        }
+        
+        // Haber verilerini önbelleğe kaydet
+        if !news.isEmpty, let encodedNews = try? JSONEncoder().encode(news) {
+            UserDefaults.standard.set(encodedNews, forKey: "cachedNews")
+            UserDefaults.standard.set(Date(), forKey: "lastNewsFetchTime") 
+        }
+    }
+    
+    private func updateCoinNamesAndLogos() {
+        // Coin isimlerini ve logo URL'lerini güncelle
+        if !coins.isEmpty {
+            let names = coins.map { $0.name }
+            self.coinNames = names.count >= 16 ? Array(names.prefix(16)) : names
+            
+            var logos: [String: String] = [:]
+            for coin in coins {
+                logos[coin.name] = coin.image
+            }
+            self.initialLogos = logos
         }
     }
     
@@ -178,22 +269,13 @@ class SearchViewModelLight: ObservableObject {
         do {
             let fetchedCoins = try await APIService.shared.fetchCoins(page: 1, perPage: 100)
             self.coins = fetchedCoins
+            updateCoinNamesAndLogos()
+            self.lastCoinFetchTime = Date()
             
-            // Coin isimlerini ve logolarını güncelle
-            let names = fetchedCoins.map { $0.name }
-            if !names.isEmpty {
-                self.coinNames = names.count >= 16 ? Array(names.prefix(16)) : names
+            // Önbelleğe kaydet
+            Task {
+                cacheData()
             }
-            
-            // URL'leri güncelle
-            var logos: [String: String] = [:]
-            for coin in fetchedCoins {
-                logos[coin.name] = coin.image
-            }
-            if !logos.isEmpty {
-                self.initialLogos = logos
-            }
-            
         } catch {
             print("Coin verileri yüklenemedi: \(error)")
         }
@@ -204,6 +286,12 @@ class SearchViewModelLight: ObservableObject {
         do {
             let fetchedNews = try await APIService.shared.fetchNews()
             self.news = fetchedNews
+            self.lastNewsFetchTime = Date()
+            
+            // Önbelleğe kaydet
+            Task {
+                cacheData()
+            }
         } catch {
             print("Haber verileri yüklenemedi: \(error)")
         }
@@ -214,8 +302,19 @@ class SearchViewModelLight: ObservableObject {
             filteredCoins = []
             filteredNews = []
         } else {
-            filteredCoins = coins.filter { $0.name.lowercased().contains(query.lowercased()) || $0.symbol.lowercased().contains(query.lowercased()) }
-            filteredNews = news.filter { $0.title.lowercased().contains(query.lowercased()) }
+            // Arama sorgusunu optimize et
+            let lowercasedQuery = query.lowercased()
+            
+            // Coin araması
+            filteredCoins = coins.filter { 
+                $0.name.lowercased().contains(lowercasedQuery) || 
+                $0.symbol.lowercased().contains(lowercasedQuery)
+            }
+            
+            // Haberlerde arama
+            filteredNews = news.filter { 
+                $0.title.lowercased().contains(lowercasedQuery)
+            }
         }
     }
 }
@@ -1384,4 +1483,5 @@ struct MainTabView_Previews: PreviewProvider {
         }
     }
 }
+
 
