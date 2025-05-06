@@ -372,8 +372,16 @@ class MultiCoinViewModel: ObservableObject {
             isLoaded = true
             error = nil
             
+        } catch APIError.allAPIsFailed {
+            self.error = "Hiçbir API kaynağından veri alınamadı. Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin.\n\nUygulamamız CoinGecko, CoinMarketCap, CoinStats, CoinCap, CryptoCompare, CoinLayer ve CoinPaprika API'lerini kullanır."
+        } catch APIError.rateLimitExceeded {
+            self.error = "API hız limiti aşıldı. Lütfen bir süre sonra tekrar deneyin."
+        } catch URLError.timedOut {
+            self.error = "Sunucuya bağlanırken zaman aşımı oluştu. İnternet bağlantınızı kontrol edin."
+        } catch URLError.notConnectedToInternet {
+            self.error = "İnternet bağlantısı bulunamadı. Lütfen ağ ayarlarınızı kontrol edin."
         } catch {
-            self.error = error.localizedDescription
+            self.error = "Veri yüklenirken bir hata oluştu: \(error.localizedDescription)"
         }
         
         isRefreshing = false
