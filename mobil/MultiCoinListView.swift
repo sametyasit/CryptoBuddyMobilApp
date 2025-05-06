@@ -355,25 +355,20 @@ class MultiCoinViewModel: ObservableObject {
     @MainActor
     private func fetchCoinData(isRefresh: Bool) async {
         do {
-            let fetchedCoins = try await apiService.fetchCoins(page: currentPage, perPage: coinsPerPage)
+            let response = try await apiService.fetchCoins(page: currentPage, perPage: coinsPerPage)
             
-            // Update active APIs
-            var sources = Set<String>()
-            for coin in fetchedCoins {
-                let source = getAPISource(from: coin.image)
-                sources.insert(source)
-            }
-            activeAPIs = Array(sources)
+            // Update active API source
+            activeAPIs = [response.source]
             
             // Update coins
             if isRefresh {
-                allCoins = fetchedCoins
+                allCoins = response.coins
             } else {
-                allCoins.append(contentsOf: fetchedCoins)
+                allCoins.append(contentsOf: response.coins)
             }
             
             // Set flags
-            hasMorePages = fetchedCoins.count >= coinsPerPage
+            hasMorePages = response.coins.count >= coinsPerPage
             isLoaded = true
             error = nil
             
@@ -383,18 +378,5 @@ class MultiCoinViewModel: ObservableObject {
         
         isRefreshing = false
         isLoadingMore = false
-    }
-    
-    // Determine source API from image URL
-    private func getAPISource(from imageUrl: String) -> String {
-        if imageUrl.contains("coingecko") {
-            return "CoinGecko"
-        } else if imageUrl.contains("coincap") {
-            return "CoinCap"
-        } else if imageUrl.contains("coinstats") {
-            return "CoinStats"
-        } else {
-            return "Unknown"
-        }
     }
 } 
