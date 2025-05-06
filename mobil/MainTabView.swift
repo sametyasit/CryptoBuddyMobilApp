@@ -267,8 +267,8 @@ class SearchViewModelLight: ObservableObject {
     @MainActor
     func fetchCoins() async {
         do {
-            let fetchedCoins = try await APIService.shared.fetchCoins(page: 1, perPage: 100)
-            self.coins = fetchedCoins
+            let response = try await APIService.shared.fetchCoins(page: 1, perPage: 100)
+            self.coins = response.coins
             updateCoinNamesAndLogos()
             self.lastCoinFetchTime = Date()
             
@@ -779,21 +779,20 @@ struct CryptoSearchAnimationView: View {
     let onCoinTap: (String) -> Void
     
     var body: some View {
-        VStack(spacing: 25) {
-            ForEach(0..<4, id: \.self) { row in
-                HStack(spacing: 25) {
-                    ForEach(0..<4, id: \.self) { column in
-                        let index = row * 4 + column
-                        if index < coinNames.count {
-                            CoinLogoCircle(name: coinNames[index], logoURL: logos[coinNames[index]], onTap: {
-                                onCoinTap(coinNames[index])
-                            })
-                        }
-                    }
-                }
+        LazyVGrid(columns: [
+            GridItem(.flexible(), spacing: 15),
+            GridItem(.flexible(), spacing: 15),
+            GridItem(.flexible(), spacing: 15),
+            GridItem(.flexible(), spacing: 15)
+        ], spacing: 15) {
+            ForEach(coinNames.prefix(16), id: \.self) { coinName in
+                CoinLogoCircle(name: coinName, logoURL: logos[coinName], onTap: {
+                    onCoinTap(coinName)
+                })
             }
         }
         .padding(.horizontal, 15)
+        .padding(.vertical, 10)
     }
 }
 
@@ -809,8 +808,8 @@ struct CoinLogoCircle: View {
             ZStack {
                 Circle()
                     .fill(AppColorsTheme.darkGray)
-                    .frame(width: 80, height: 80)
-                    .shadow(color: .black.opacity(0.2), radius: 5)
+                    .frame(width: 60, height: 60)
+                    .shadow(color: .black.opacity(0.2), radius: 3)
                 
                 if let logoURL = logoURL, let url = URL(string: logoURL) {
                     CachedAsyncImage(url: url) { phase in
@@ -818,15 +817,15 @@ struct CoinLogoCircle: View {
                         case .success(let image):
                             image
                                 .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 55, height: 55)
+                                .scaledToFit()
+                                .frame(width: 45, height: 45)
                                 .clipShape(Circle())
                         case .empty, .failure:
                             Image(systemName: "bitcoinsign.circle.fill")
                                 .resizable()
                                 .scaledToFit()
                                 .foregroundColor(AppColorsTheme.gold)
-                                .frame(width: 50, height: 50)
+                                .frame(width: 40, height: 40)
                         @unknown default:
                             EmptyView()
                         }
@@ -836,10 +835,10 @@ struct CoinLogoCircle: View {
                         .resizable()
                         .scaledToFit()
                         .foregroundColor(AppColorsTheme.gold)
-                        .frame(width: 50, height: 50)
+                        .frame(width: 40, height: 40)
                 }
             }
-            .scaleEffect(isAnimating ? 1.05 : 1.0)
+            .scaleEffect(isAnimating ? 1.03 : 1.0)
             .onAppear {
                 withAnimation(Animation.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
                     isAnimating = true
@@ -965,387 +964,900 @@ struct CoinDetailView: View {
     @State private var isLoading = true
     @State private var showingSafari = false
     @State private var selectedNewsURL = URL(string: "https://example.com")!
+    @State private var errorMessage: String? = nil
+    @State private var selectedChartPeriod: ChartPeriod = .week
+    @State private var retryCount = 0
+    @State private var showFullDescription = false
+    @State private var isAppearing = false
     
-    var body: some View {
-        NavigationView {
-            ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
-                
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        if isLoading {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                    .scaleEffect(1.5)
-                                    .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
-                                    .padding(.top, 50)
-                                Spacer()
-                            }
-                        } else if let coin = coin {
-                            // Coin başlık ve fiyat
-                            HStack {
-                                if let url = URL(string: coin.image) {
-                                    CachedAsyncImage(url: url) { phase in
-                                        switch phase {
-                                        case .success(let image):
-                                            image
-                                                .resizable()
-                                                .scaledToFit()
-                                                .frame(width: 60, height: 60)
-                                                .clipShape(Circle())
-                                        case .empty, .failure:
-                                            Image(systemName: "bitcoinsign.circle.fill")
-                                                .resizable()
-                                                .scaledToFit()
-                                                .foregroundColor(AppColorsTheme.gold)
-                                                .frame(width: 60, height: 60)
-                                        @unknown default:
-                                            EmptyView()
-                                        }
-                                    }
-                                }
-                                
-                                VStack(alignment: .leading) {
-                                    Text(coin.name)
-                                        .font(.title)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.white)
-                                    
-                                    Text(coin.symbol)
-                                        .font(.headline)
-                                        .foregroundColor(.gray)
-                                }
-                                
-                                Spacer()
-                                
-                                VStack(alignment: .trailing) {
-                                    Text(coin.formattedPrice)
-                                        .font(.title2)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.white)
-                                    
-                                    Text(coin.formattedChange)
-                                        .font(.headline)
-                                        .foregroundColor(coin.change24h >= 0 ? .green : .red)
-                                }
-                            }
-                            .padding()
-                            .background(AppColorsTheme.darkGray.opacity(0.3))
-                            .cornerRadius(15)
-                            
-                            // Market bilgisi
-                            VStack(alignment: .leading) {
-                                Text("Market Bilgisi")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .padding(.bottom, 5)
-                                
-                                HStack {
-                                    DetailInfoView(title: "Market Cap", value: coin.formattedMarketCap)
-                                    DetailInfoView(title: "Sıralama", value: "#\(coin.rank)")
-                                }
-                            }
-                            .padding()
-                            .background(AppColorsTheme.darkGray.opacity(0.3))
-                            .cornerRadius(15)
-                            
-                            // İlgili haberler
-                            VStack(alignment: .leading) {
-                                Text("İlgili Haberler")
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                    .padding(.bottom, 5)
-                                
-                                if coinNews.isEmpty {
-                                    Text("Haber bulunamadı")
-                                        .foregroundColor(.gray)
-                                        .padding()
-                                        .frame(maxWidth: .infinity, alignment: .center)
-                                } else {
-                                    ForEach(coinNews) { news in
-                                        Button(action: {
-                                            if let url = URL(string: news.url) {
-                                                selectedNewsURL = url
-                                                showingSafari = true
-                                            }
-                                        }) {
-                                            SearchNewsRow(news: news)
-                                                .padding(.vertical, 5)
-                                        }
-                                    }
-                                }
-                            }
-                            .padding()
-                            .background(AppColorsTheme.darkGray.opacity(0.3))
-                            .cornerRadius(15)
-                            
-                        } else {
-                            Text("Coin bulunamadı")
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity, alignment: .center)
-                                .padding(.top, 50)
-                        }
-                    }
-                    .padding()
-                }
-            }
-            .navigationTitle("Coin Detayları")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        presentationMode.wrappedValue.dismiss()
-                    }) {
-                        Text("Kapat")
-                            .foregroundColor(AppColorsTheme.gold)
-                    }
-                }
-            }
-            .onAppear {
-                loadCoinDetails()
-            }
-            .sheet(isPresented: $showingSafari) {
-                CustomSafariView(url: selectedNewsURL)
-                    .edgesIgnoringSafeArea(.all)
+    enum ChartPeriod: String, CaseIterable {
+        case day = "24s"
+        case week = "1h"
+        case month = "1a"
+        case year = "1y"
+        
+        var days: Int {
+            switch self {
+            case .day: return 1
+            case .week: return 7
+            case .month: return 30
+            case .year: return 365
             }
         }
     }
     
-    private func loadCoinDetails() {
-        Task {
-            // Coin verilerini yükle
-            do {
-                let coins = try await APIService.shared.fetchCoins(page: 1, perPage: 100)
-                if let foundCoin = coins.first(where: { $0.id == coinId }) {
-                    await MainActor.run {
-                        self.coin = foundCoin
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            VStack(spacing: 0) {
+                // Başlık çubuğu
+                CoinDetailHeaderView(
+                    coinName: coin?.name,
+                    onClose: {
+                        print("🔴 CoinDetailView kapatılıyor, ID: \(coinId)")
+                        isAppearing = false
+                        // Animasyon için küçük bir gecikme
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            presentationMode.wrappedValue.dismiss()
+                        }
                     }
-                    
-                    // İlgili haberleri yükle
-                    let allNews = try await APIService.shared.fetchNews()
-                    let filteredNews = allNews.filter { 
-                        $0.title.lowercased().contains(foundCoin.name.lowercased()) ||
-                        $0.description.lowercased().contains(foundCoin.name.lowercased()) ||
-                        (foundCoin.symbol.count > 2 && $0.title.lowercased().contains(foundCoin.symbol.lowercased()))
-                    }
-                    
-                    await MainActor.run {
-                        self.coinNews = filteredNews
-                        self.isLoading = false
+                )
+                
+                if isLoading {
+                    // Yükleniyor
+                    LoadingView(message: "Yükleniyor...")
+                } else if let error = errorMessage {
+                    // Hata durumu
+                    ErrorView(
+                        error: error,
+                        onRetry: {
+                            isLoading = true
+                            errorMessage = nil
+                            retryCount += 1
+                            loadCoinDetails()
+                        }
+                    )
+                } else if let coin = coin {
+                    // Coin bilgileri
+                    ScrollView {
+                        CoinDetailContentView(
+                            coin: coin,
+                            selectedChartPeriod: $selectedChartPeriod,
+                            showFullDescription: $showFullDescription,
+                            coinNews: coinNews,
+                            onChartPeriodSelect: { period in
+                                loadPriceHistory(for: coin.id, period: period)
+                            },
+                            onOpenURL: { urlString in
+                                openURL(urlString)
+                            },
+                            onNewsSelect: { url in
+                                selectedNewsURL = url
+                                showingSafari = true
+                            }
+                        )
                     }
                 } else {
+                    // Coin bulunamadı
+                    CoinNotFoundView(
+                        coinId: coinId,
+                        onRetry: {
+                            isLoading = true
+                            retryCount += 1
+                            loadCoinDetails()
+                        }
+                    )
+                }
+            }
+        }
+        .onAppear {
+            print("🚀 CoinDetailView.onAppear çağrıldı, coinId: \(coinId)")
+            isAppearing = true
+            loadCoinDetails()
+        }
+        .onDisappear {
+            print("🔴 CoinDetailView.onDisappear çağrıldı")
+            isAppearing = false
+        }
+        .sheet(isPresented: $showingSafari) {
+            CustomSafariView(url: selectedNewsURL)
+                .ignoresSafeArea()
+        }
+    }
+    
+    // Coin detay içerik yükleme fonksiyonları
+    private func loadCoinDetails() {
+        print("📱 Loading coin details for ID: \"\(coinId)\"")
+        
+        guard !coinId.isEmpty else {
+            print("❌ Boş coinId! Detaylar yüklenemez.")
+            errorMessage = "Geçersiz coin ID"
+            isLoading = false
+            return
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                print("🔍 API'den detaylı coin bilgisi alınıyor...")
+                let detailedCoin = try await APIService.shared.fetchCoinDetails(coinId: coinId)
+                print("✅ Detaylı coin bilgisi alındı: \(detailedCoin.name)")
+                
+                await MainActor.run {
+                    self.coin = detailedCoin
+                    self.isLoading = false
+                }
+                
+                // Haberleri yüklemeye çalış
+                await loadNews(for: detailedCoin)
+            } catch APIError.coinNotFound {
+                print("⚠️ Coin bulunamadı: \(coinId)")
+                
+                // Fallback olarak temel coin verileri almaya çalış
+                do {
+                    try await loadBasicCoinData()
+                } catch {
                     await MainActor.run {
                         self.isLoading = false
+                        self.errorMessage = "Bu coin için veri bulunamadı. Lütfen daha sonra tekrar deneyin."
+                    }
+                }
+            } catch APIError.invalidResponse {
+                print("❌ API'den geçersiz yanıt alındı")
+                await MainActor.run {
+                    self.isLoading = false
+                    self.errorMessage = "Sunucu şu anda yanıt vermiyor. Lütfen daha sonra tekrar deneyin."
+                }
+            } catch APIError.allAPIsFailed {
+                print("❌ Tüm API kaynakları başarısız oldu")
+                await MainActor.run {
+                    self.isLoading = false
+                    self.errorMessage = "İnternet bağlantınızı kontrol edin ve tekrar deneyin."
+                }
+            } catch {
+                print("❌ Coin detayları yüklenirken hata: \(error)")
+                await MainActor.run {
+                    self.isLoading = false
+                    // URLError durumunda daha anlaşılır mesaj göster
+                    if let urlError = error as? URLError {
+                        switch urlError.code {
+                        case .notConnectedToInternet:
+                            self.errorMessage = "İnternet bağlantısı bulunamadı. Lütfen bağlantınızı kontrol edin."
+                        case .timedOut:
+                            self.errorMessage = "Bağlantı zaman aşımına uğradı. Lütfen daha sonra tekrar deneyin."
+                        default:
+                            self.errorMessage = "Ağ hatası: \(urlError.localizedDescription)"
+                        }
+                    } else {
+                        self.errorMessage = "Hata: \(error.localizedDescription)"
+                    }
+                }
+            }
+        }
+    }
+    
+    private func loadBasicCoinData() async throws {
+        print("🔍 Backup: Temel coin verilerini almaya çalışıyor...")
+        let coins = try await APIService.shared.fetchCoins(page: 1, perPage: 100)
+        
+        if let foundCoin = coins.first(where: { $0.id == coinId }) {
+            print("✅ Temel coin verisi bulundu: \(foundCoin.name)")
+            
+            await MainActor.run {
+                self.coin = foundCoin
+                self.isLoading = false
+            }
+            
+            // Grafik verilerini almaya çalış
+            try? await loadPriceHistory(for: coinId)
+            
+            // Haberleri almaya çalış
+            await loadNews(for: foundCoin)
+        } else {
+            throw APIError.coinNotFound
+        }
+    }
+    
+    private func loadPriceHistory(for coinId: String, period: ChartPeriod = .week) {
+        Task {
+            do {
+                print("📈 Fiyat geçmişi alınıyor: \(coinId) - \(period.rawValue)")
+                let historyData = try await APIService.shared.fetchCoinPriceHistory(coinId: coinId, days: period.days)
+                
+                guard !historyData.isEmpty else {
+                    print("⚠️ Fiyat geçmişi boş")
+                    return
+                }
+                
+                print("✅ \(historyData.count) adet grafik noktası alındı")
+                
+                await MainActor.run {
+                    if var updatedCoin = self.coin {
+                        updatedCoin.graphData = historyData
+                        self.coin = updatedCoin
                     }
                 }
             } catch {
-                print("Error loading coin details: \(error)")
-                await MainActor.run {
-                    self.isLoading = false
-                }
+                print("⚠️ Fiyat geçmişi alınamadı: \(error)")
             }
+        }
+    }
+    
+    private func loadNews(for coin: Coin) async {
+        do {
+            print("📰 \(coin.name) için haberler yükleniyor...")
+            let allNews = try await APIService.shared.fetchNews()
+            print("✅ \(allNews.count) haber alındı")
+            
+            // Coin adı, sembolü ve related keywords ile filtrele
+            let keywords = [coin.name.lowercased(), coin.symbol.lowercased()]
+            
+            let filteredNews = allNews.filter { news in
+                let content = news.title.lowercased() + " " + news.description.lowercased()
+                return keywords.contains { content.contains($0) }
+            }
+            print("📰 \(filteredNews.count) ilgili haber bulundu")
+            
+            await MainActor.run {
+                self.coinNews = filteredNews
+            }
+        } catch {
+            print("⚠️ Haberler yüklenirken hata oluştu: \(error), sadece log")
+            // Haber hatası kritik değil, sadece log
+        }
+    }
+    
+    private func openURL(_ urlString: String) {
+        if let url = URL(string: urlString) {
+            selectedNewsURL = url
+            showingSafari = true
         }
     }
 }
 
+// MARK: - Alt Görünüm Bileşenleri
+struct CoinDetailHeaderView: View {
+    let coinName: String?
+    let onClose: () -> Void
+    
+    var body: some View {
+        HStack {
+            // Coin ismi veya varsayılan başlık
+            Text(coinName ?? "Coin Detayları")
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding(.leading)
+            
+            Spacer()
+            
+            Button(action: onClose) {
+                Text("Kapat")
+                    .foregroundColor(AppColorsTheme.gold)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.black.opacity(0.5))
+                    .cornerRadius(8)
+            }
+            .padding(.trailing)
+        }
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.7))
+    }
+}
+
+struct LoadingView: View {
+    let message: String
+    
+    var body: some View {
+        VStack {
+            Spacer()
+            
+            ProgressView()
+                .scaleEffect(1.5)
+                .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
+                .padding()
+            
+            Text(message)
+                .foregroundColor(.gray)
+                .padding()
+            
+            Spacer()
+        }
+    }
+}
+
+struct ErrorView: View {
+    let error: String
+    let onRetry: () -> Void
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Spacer()
+            
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 50))
+                .foregroundColor(AppColorsTheme.gold)
+                .padding()
+            
+            Text("Veriler yüklenemedi")
+                .font(.title)
+                .foregroundColor(.white)
+            
+            Text(error)
+                .font(.body)
+                .foregroundColor(.gray)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            Button(action: onRetry) {
+                Text("Tekrar Dene")
+                    .font(.headline)
+                    .foregroundColor(.black)
+                    .padding()
+                    .background(AppColorsTheme.gold)
+                    .cornerRadius(10)
+            }
+            .padding(.top, 20)
+            
+            Spacer()
+        }
+        .padding()
+    }
+}
+
+struct CoinNotFoundView: View {
+    let coinId: String
+    let onRetry: () -> Void
+    
+    var body: some View {
+        VStack {
+            Spacer()
+            
+            Text("Coin bulunamadı")
+                .font(.title)
+                .foregroundColor(.white)
+                .padding()
+            
+            Text("ID: \(coinId)")
+                .font(.body)
+                .foregroundColor(.gray)
+                .padding()
+            
+            Button(action: onRetry) {
+                Text("Tekrar Dene")
+                    .font(.headline)
+                    .foregroundColor(.black)
+                    .padding()
+                    .background(AppColorsTheme.gold)
+                    .cornerRadius(10)
+            }
+            .padding(.top, 20)
+            
+            Spacer()
+        }
+    }
+}
+
+struct CoinDetailContentView: View {
+    let coin: Coin
+    @Binding var selectedChartPeriod: CoinDetailView.ChartPeriod
+    @Binding var showFullDescription: Bool
+    let coinNews: [NewsItem]
+    let onChartPeriodSelect: (CoinDetailView.ChartPeriod) -> Void
+    let onOpenURL: (String) -> Void
+    let onNewsSelect: (URL) -> Void
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Coin başlık
+            CoinHeaderView(coin: coin)
+            
+            // Fiyat grafiği
+            if !coin.graphData.isEmpty {
+                CoinChartView(
+                    coin: coin,
+                    selectedPeriod: $selectedChartPeriod,
+                    onPeriodSelect: onChartPeriodSelect
+                )
+            }
+            
+            // Market bilgisi
+            CoinMarketInfoView(coin: coin)
+            
+            // Açıklama
+            if !coin.description.isEmpty {
+                CoinDescriptionView(
+                    description: coin.description,
+                    showFull: $showFullDescription
+                )
+            }
+            
+            // Bağlantılar
+            CoinLinksView(
+                website: coin.website,
+                twitter: coin.twitter,
+                reddit: coin.reddit,
+                github: coin.github,
+                onOpenURL: onOpenURL
+            )
+            
+            // İlgili haberler
+            CoinNewsView(
+                news: coinNews,
+                onNewsSelect: onNewsSelect
+            )
+        }
+        .padding()
+    }
+}
+
+struct CoinHeaderView: View {
+    let coin: Coin
+    
+    var body: some View {
+        HStack {
+            if let url = URL(string: coin.image) {
+                CachedAsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 60, height: 60)
+                            .clipShape(Circle())
+                    case .empty, .failure:
+                        Image(systemName: "bitcoinsign.circle.fill")
+                            .resizable()
+                            .scaledToFit()
+                            .foregroundColor(AppColorsTheme.gold)
+                            .frame(width: 60, height: 60)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            } else {
+                Image(systemName: "bitcoinsign.circle.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .foregroundColor(AppColorsTheme.gold)
+                    .frame(width: 60, height: 60)
+            }
+            
+            VStack(alignment: .leading) {
+                Text(coin.name)
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                
+                Text(coin.symbol)
+                    .font(.headline)
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing) {
+                Text(coin.formattedPrice)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                
+                Text(coin.formattedChange)
+                    .font(.headline)
+                    .foregroundColor(coin.change24h >= 0 ? .green : .red)
+            }
+        }
+        .padding()
+        .background(AppColorsTheme.darkGray.opacity(0.3))
+        .cornerRadius(15)
+    }
+}
+
+struct CoinChartView: View {
+    let coin: Coin
+    @Binding var selectedPeriod: CoinDetailView.ChartPeriod
+    let onPeriodSelect: (CoinDetailView.ChartPeriod) -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Fiyat Grafiği")
+                .font(.headline)
+                .foregroundColor(.white)
+            
+            // Zaman seçici
+            HStack {
+                ForEach(CoinDetailView.ChartPeriod.allCases, id: \.self) { period in
+                    Button(action: {
+                        withAnimation {
+                            selectedPeriod = period
+                        }
+                        onPeriodSelect(period)
+                    }) {
+                        Text(period.rawValue)
+                            .font(.caption)
+                            .foregroundColor(selectedPeriod == period ? .white : .gray)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(selectedPeriod == period ? AppColorsTheme.gold : Color.clear)
+                            )
+                    }
+                }
+                Spacer()
+            }
+            .padding(.vertical, 4)
+            
+            // Grafik
+            PriceChart(data: coin.graphData)
+                .frame(height: 200)
+        }
+        .padding()
+        .background(AppColorsTheme.darkGray.opacity(0.3))
+        .cornerRadius(15)
+    }
+}
+
+struct CoinMarketInfoView: View {
+    let coin: Coin
+    
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("Market Bilgisi")
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding(.bottom, 5)
+            
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                DetailInfoView(title: "Market Cap", value: coin.formattedMarketCap)
+                DetailInfoView(title: "Sıralama", value: "#\(coin.rank)")
+                DetailInfoView(title: "İşlem Hacmi", value: coin.formattedVolume)
+                DetailInfoView(title: "ATH", value: coin.formattedAth)
+                DetailInfoView(title: "24s Yüksek", value: coin.formattedHigh24h)
+                DetailInfoView(title: "24s Düşük", value: coin.formattedLow24h)
+            }
+        }
+        .padding()
+        .background(AppColorsTheme.darkGray.opacity(0.3))
+        .cornerRadius(15)
+    }
+}
+
+struct CoinDescriptionView: View {
+    let description: String
+    @Binding var showFull: Bool
+    
+    var cleanDescription: String {
+        description.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression, range: nil)
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("Hakkında")
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding(.bottom, 5)
+            
+            if showFull {
+                Text(cleanDescription)
+                    .font(.body)
+                    .foregroundColor(.gray)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                
+                Button("Daha Az Göster") {
+                    withAnimation {
+                        showFull = false
+                    }
+                }
+                .foregroundColor(AppColorsTheme.gold)
+                .padding(.top, 8)
+            } else {
+                Text(cleanDescription)
+                    .font(.body)
+                    .foregroundColor(.gray)
+                    .lineLimit(3)
+                
+                Button("Daha Fazla Göster") {
+                    withAnimation {
+                        showFull = true
+                    }
+                }
+                .foregroundColor(AppColorsTheme.gold)
+                .padding(.top, 8)
+            }
+        }
+        .padding()
+        .background(AppColorsTheme.darkGray.opacity(0.3))
+        .cornerRadius(15)
+    }
+}
+
+struct CoinLinksView: View {
+    let website: String
+    let twitter: String
+    let reddit: String
+    let github: String
+    let onOpenURL: (String) -> Void
+    
+    var body: some View {
+        HStack(spacing: 20) {
+            if !website.isEmpty {
+                SocialButton(icon: "globe", color: .blue) {
+                    onOpenURL(website)
+                }
+            }
+            
+            if !twitter.isEmpty {
+                SocialButton(icon: "bird", color: .cyan) {
+                    onOpenURL(twitter)
+                }
+            }
+            
+            if !reddit.isEmpty {
+                SocialButton(icon: "message.fill", color: .orange) {
+                    onOpenURL(reddit)
+                }
+            }
+            
+            if !github.isEmpty {
+                SocialButton(icon: "chevron.left.forwardslash.chevron.right", color: .white) {
+                    onOpenURL(github)
+                }
+            }
+            
+            Spacer()
+        }
+        .padding()
+        .background(AppColorsTheme.darkGray.opacity(0.3))
+        .cornerRadius(15)
+    }
+}
+
+struct CoinNewsView: View {
+    let news: [NewsItem]
+    let onNewsSelect: (URL) -> Void
+    
+    var body: some View {
+        VStack(alignment: .leading) {
+            Text("İlgili Haberler")
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding(.bottom, 5)
+            
+            if news.isEmpty {
+                Text("Haber bulunamadı")
+                    .foregroundColor(.gray)
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .center)
+            } else {
+                ForEach(news) { news in
+                    Button(action: {
+                        if let url = URL(string: news.url) {
+                            onNewsSelect(url)
+                        }
+                    }) {
+                        SearchNewsRow(news: news)
+                            .padding(.vertical, 5)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(AppColorsTheme.darkGray.opacity(0.3))
+        .cornerRadius(15)
+    }
+}
+
+// MARK: - Preview
+struct MainTabView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            MainTabView()
+        }
+    }
+}
+
+// Sosyal medya butonu
+struct SocialButton: View {
+    let icon: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 20))
+                .foregroundColor(color)
+                .frame(width: 40, height: 40)
+                .background(AppColorsTheme.darkGray)
+                .clipShape(Circle())
+        }
+    }
+}
+
+// Market bilgi hücresi
 struct DetailInfoView: View {
     let title: String
     let value: String
     
     var body: some View {
-        VStack(alignment: .leading) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(title)
-                .font(.subheadline)
+                .font(.caption)
                 .foregroundColor(.gray)
-            
             Text(value)
-                .font(.headline)
+                .font(.subheadline)
                 .foregroundColor(.white)
+                .fontWeight(.medium)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(AppColorsTheme.darkGray.opacity(0.5))
+        .cornerRadius(8)
+    }
+}
+
+// Fiyat grafiği
+struct PriceChart: View {
+    let data: [GraphPoint]
+    @State private var selectedPoint: GraphPoint? = nil
+    @State private var lineHeight: CGFloat = 0
+    
+    var minValue: Double {
+        data.map { $0.price }.min() ?? 0
+    }
+    
+    var maxValue: Double {
+        data.map { $0.price }.max() ?? 0
+    }
+    
+    var latestPrice: Double {
+        data.last?.price ?? 0
+    }
+    
+    var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }
+    
+    var body: some View {
+        VStack {
+            // Seçili nokta bilgisi
+            if let point = selectedPoint {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(dateFormatter.string(from: point.date))
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                        
+                        Text(String(format: "$%.2f", point.price))
+                            .font(.headline)
+                            .foregroundColor(.white)
+                    }
+                    
+                    Spacer()
+                    
+                    let changePercent = ((point.price / latestPrice) - 1) * 100
+                    Text(String(format: "%.2f%%", changePercent))
+                        .foregroundColor(changePercent >= 0 ? .green : .red)
+                        .font(.subheadline)
+                }
+                .padding(.bottom, 8)
+            } else {
+                HStack {
+                    Text(String(format: "$%.2f", latestPrice))
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    Spacer()
+                }
+                .padding(.bottom, 8)
+            }
+            
+            GeometryReader { geometry in
+                ZStack {
+                    // Çizgi grafiği
+                    if data.count > 1 {
+                        Path { path in
+                            let step = geometry.size.width / CGFloat(data.count - 1)
+                            let range = maxValue - minValue
+                            
+                            path.move(to: CGPoint(
+                                x: 0,
+                                y: geometry.size.height - CGFloat((data[0].price - minValue) / range) * geometry.size.height
+                            ))
+                            
+                            for i in 1..<data.count {
+                                let x = step * CGFloat(i)
+                                let y = geometry.size.height - CGFloat((data[i].price - minValue) / range) * geometry.size.height
+                                path.addLine(to: CGPoint(x: x, y: y))
+                            }
+                        }
+                        .stroke(lineGradient, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                        
+                        // Altlık alan
+                        Path { path in
+                            let step = geometry.size.width / CGFloat(data.count - 1)
+                            let range = maxValue - minValue
+                            
+                            path.move(to: CGPoint(
+                                x: 0,
+                                y: geometry.size.height - CGFloat((data[0].price - minValue) / range) * geometry.size.height
+                            ))
+                            
+                            for i in 1..<data.count {
+                                let x = step * CGFloat(i)
+                                let y = geometry.size.height - CGFloat((data[i].price - minValue) / range) * geometry.size.height
+                                path.addLine(to: CGPoint(x: x, y: y))
+                            }
+                            
+                            path.addLine(to: CGPoint(x: geometry.size.width, y: geometry.size.height))
+                            path.addLine(to: CGPoint(x: 0, y: geometry.size.height))
+                            path.closeSubpath()
+                        }
+                        .fill(areaGradient)
+                        
+                        // Etkileşimli dokunmatik alan
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { value in
+                                        let step = geometry.size.width / CGFloat(data.count - 1)
+                                        let index = Int(value.location.x / step)
+                                        if index >= 0 && index < data.count {
+                                            selectedPoint = data[index]
+                                        }
+                                    }
+                                    .onEnded { _ in
+                                        selectedPoint = nil
+                                    }
+                            )
+                    } else {
+                        Text("Yeterli veri yok")
+                            .foregroundColor(.gray)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                }
+            }
+        }
+    }
+    
+    // Gradients
+    var lineGradient: LinearGradient {
+        LinearGradient(
+            gradient: Gradient(colors: [AppColorsTheme.gold, .orange]),
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+    
+    var areaGradient: LinearGradient {
+        LinearGradient(
+            gradient: Gradient(colors: [
+                AppColorsTheme.gold.opacity(0.3),
+                AppColorsTheme.gold.opacity(0.1),
+                AppColorsTheme.gold.opacity(0.0)
+            ]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 }
 
 // MARK: - Portfolio View
 struct PortfolioView: View {
     @Binding var showingLoginView: Bool
-    @State private var isLoggedIn = false
-    @State private var username = ""
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
-                
-                if !isLoggedIn {
-                    // Kullanıcı giriş yapmamışsa gösterilecek görünüm
-                    VStack(spacing: 20) {
-                        Image(systemName: "lock.circle")
-                            .font(.system(size: 70))
-                            .foregroundColor(AppColorsTheme.gold)
-                            .padding(.bottom, 30)
-                        
-                        Text("Portföyünüzü görüntülemek için \ngiriş yapmalısınız")
-                            .font(.title2)
-                            .multilineTextAlignment(.center)
-                            .foregroundColor(.white)
-                            .padding(.bottom, 20)
-                        
-                        Button(action: {
-                            showingLoginView = true
-                        }) {
-                            Text("Giriş Yap")
-                                .font(.headline)
-                                .foregroundColor(.black)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(AppColorsTheme.gold)
-                                .cornerRadius(10)
-                        }
-                        .padding(.horizontal, 50)
-                    }
-                } else {
-                    // Kullanıcı giriş yapmışsa portföy görünümü
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
-                            Text("Hoş Geldiniz, \(username)")
-                                .font(.title)
-                                .foregroundColor(AppColorsTheme.gold)
-                                .padding(.top)
-                            
-                            // Portföy özeti
-                            HStack(spacing: 16) {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Toplam Değer")
-                                        .font(.subheadline)
-                                        .foregroundColor(.gray)
-                                    
-                                    Text("$15,482.65")
-                                        .font(.title3)
-                                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                                    
-                                    Text("+5.2%")
-                                        .font(.caption)
-                                        .foregroundColor(.green)
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color(UIColor.darkGray).opacity(0.3))
-                                .cornerRadius(12)
-                                
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("24s Değişim")
-                                        .font(.subheadline)
-                                        .foregroundColor(.gray)
-                                    
-                                    Text("$842.59")
-                                        .font(.title3)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.white)
-                                    
-                                    Text("+3.8%")
-                                        .font(.caption)
-                                        .foregroundColor(.green)
-                                }
-                                .padding()
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(Color(UIColor.darkGray).opacity(0.3))
-                                .cornerRadius(12)
-                            }
-                            
-                            // Portföy dağılımı
-                            Text("Portföy Dağılımı")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding(.top, 10)
-                            
-                            // Demo kripto paralar
-                            cryptoAssetRow(name: "Bitcoin", symbol: "BTC", amount: "0.42", value: "$8,245.36", change: "+2.3%")
-                            cryptoAssetRow(name: "Ethereum", symbol: "ETH", amount: "3.15", value: "$4,721.58", change: "+4.1%")
-                            cryptoAssetRow(name: "Solana", symbol: "SOL", amount: "24.8", value: "$1,254.46", change: "+8.7%")
-                            cryptoAssetRow(name: "Cardano", symbol: "ADA", amount: "1450", value: "$956.85", change: "-1.2%")
-                            cryptoAssetRow(name: "Binance Coin", symbol: "BNB", amount: "1.3", value: "$304.00", change: "+0.5%")
-                        }
-                        .padding()
-                    }
-                }
-            }
-            .navigationTitle("Portföy")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if isLoggedIn {
-                        Button(action: {
-                            // Çıkış yap
-                            UserDefaults.standard.set(false, forKey: "isLoggedIn")
-                            UserDefaults.standard.removeObject(forKey: "username")
-                            isLoggedIn = false
-                            username = ""
-                        }) {
-                            Image(systemName: "rectangle.portrait.and.arrow.right")
-                                .foregroundColor(AppColorsTheme.gold)
-                        }
-                    } else {
-                        Button(action: {
-                            showingLoginView = true
-                        }) {
-                            Image(systemName: "person.circle.fill")
-                                .foregroundColor(AppColorsTheme.gold)
-                                .imageScale(.large)
-                        }
-                    }
-                }
-            }
-            .onAppear {
-                // Kullanıcının giriş durumunu kontrol et
-                isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
-                username = UserDefaults.standard.string(forKey: "username") ?? "Kullanıcı"
-            }
-            .onChange(of: showingLoginView) { _ in
-                if !showingLoginView {
-                isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
-                    username = UserDefaults.standard.string(forKey: "username") ?? "Kullanıcı"
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("UserLoggedIn"))) { _ in
-                isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
-                username = UserDefaults.standard.string(forKey: "username") ?? "Kullanıcı"
-            }
-        }
-    }
-    
-    // Kripto varlık satırı
-    private func cryptoAssetRow(name: String, symbol: String, amount: String, value: String, change: String) -> some View {
-        HStack {
-            // Coin bilgileri
-            VStack(alignment: .leading, spacing: 4) {
-                Text(name)
-                    .font(.headline)
-                    .foregroundColor(.white)
-                
-                Text("\(amount) \(symbol)")
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-            }
-            
-            Spacer()
-            
-            // Değer bilgileri
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(value)
-                    .font(.headline)
-                    .foregroundColor(.white)
-                
-                Text(change)
-                    .font(.subheadline)
-                    .foregroundColor(change.hasPrefix("+") ? .green : .red)
-            }
-        }
-        .padding()
-        .background(Color(UIColor.darkGray).opacity(0.3))
-        .cornerRadius(12)
+        // Portfolio view content
+        Text("Portfolio View")
     }
 }
 
@@ -1430,56 +1942,6 @@ struct CommunityView: View {
             .onChange(of: showingLoginView) { _ in
                 isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
             }
-        }
-    }
-}
-
-// MARK: - Geçici Coin Detay Görünümü
-struct TemporaryCoinDetailView: View {
-    let coinId: String
-    @Environment(\.presentationMode) var presentationMode
-    
-    var body: some View {
-        VStack {
-            Text("Coin ID: \(coinId)")
-                .font(.headline)
-                .padding()
-            
-            Text("Coin detayları yakında burada olacak")
-                .foregroundColor(.gray)
-                .padding()
-            
-            Button("Kapat") {
-                presentationMode.wrappedValue.dismiss()
-            }
-            .padding()
-            .background(AppColorsTheme.gold)
-            .foregroundColor(.black)
-            .cornerRadius(8)
-            .padding(.top, 20)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black)
-        .navigationTitle("Coin Detayları")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(action: {
-                    presentationMode.wrappedValue.dismiss()
-                }) {
-                    Text("Kapat")
-                        .foregroundColor(AppColorsTheme.gold)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Preview
-struct MainTabView_Previews: PreviewProvider {
-    static var previews: some View {
-        Group {
-            MainTabView()
         }
     }
 }
