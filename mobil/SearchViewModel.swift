@@ -37,8 +37,8 @@ class SearchViewModel: ObservableObject {
     func fetchCoins() async {
         isLoading = true
         do {
-            let coins = try await APIService.shared.fetchCoins(page: 1, perPage: 100)
-            self.allCoins = coins
+            let response = try await APIService.shared.fetchCoins(page: 1, perPage: 100)
+            self.allCoins = response.coins
             self.coinsLoaded = true
             self.applyFilters()
         } catch {
