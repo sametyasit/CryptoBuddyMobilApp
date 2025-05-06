@@ -139,7 +139,7 @@ struct CustomSafariView: UIViewControllerRepresentable {
 }
 
 // SearchViewModel modelini ekleyelim
-class SearchViewModelLight: ObservableObject {
+class SearchViewModelLight: ObservableObject, @unchecked Sendable {
     @Published var searchText = ""
     @Published var isLoading = false
     @Published var coins: [Coin] = []
@@ -265,6 +265,7 @@ class SearchViewModelLight: ObservableObject {
     }
     
     @MainActor
+    @Sendable
     func fetchCoins() async {
         do {
             let response = try await APIService.shared.fetchCoins(page: 1, perPage: 100)
@@ -282,6 +283,7 @@ class SearchViewModelLight: ObservableObject {
     }
     
     @MainActor
+    @Sendable
     func fetchNews() async {
         do {
             let fetchedNews = try await APIService.shared.fetchNews()
@@ -670,7 +672,7 @@ struct SearchView: View {
                         .textFieldStyle(RoundedBorderTextFieldStyle())
                         .padding(.horizontal)
                         .padding(.top, 10)
-                        .onChange(of: searchText) { newValue in
+                        .onChange(of: searchText) { oldValue, newValue in
                             viewModel.searchCoins(newValue)
                         }
                     
@@ -1939,7 +1941,7 @@ struct CommunityView: View {
                 // Kullanıcının giriş durumunu kontrol et
                 isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
             }
-            .onChange(of: showingLoginView) { _ in
+            .onChange(of: showingLoginView) { oldValue, newValue in
                 isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
             }
         }
