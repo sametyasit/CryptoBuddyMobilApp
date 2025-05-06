@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 
 class MultiCoinViewModel: ObservableObject {
     @Published var allCoins: [Coin] = []
@@ -11,8 +10,6 @@ class MultiCoinViewModel: ObservableObject {
     
     private var currentPage = 1
     private let pageSize = 50
-    private let apiService = APIService()
-    private var cancellables = Set<AnyCancellable>()
     
     func refreshCoins() {
         guard !isRefreshing else { return }
@@ -21,21 +18,9 @@ class MultiCoinViewModel: ObservableObject {
         error = nil
         currentPage = 1
         
-        apiService.fetchCoins(page: currentPage, pageSize: pageSize)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                self?.isRefreshing = false
-                
-                switch completion {
-                case .finished:
-                    self?.isLoaded = true
-                case .failure(let error):
-                    self?.error = error.localizedDescription
-                }
-            } receiveValue: { [weak self] coins in
-                self?.allCoins = coins
-            }
-            .store(in: &cancellables)
+        Task {
+            await fetchCoinsPage(page: currentPage)
+        }
     }
     
     func loadMoreCoins() {
@@ -44,18 +29,32 @@ class MultiCoinViewModel: ObservableObject {
         isLoadingMore = true
         currentPage += 1
         
-        apiService.fetchCoins(page: currentPage, pageSize: pageSize)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                self?.isLoadingMore = false
-                
-                if case .failure(let error) = completion {
-                    self?.error = error.localizedDescription
-                    self?.currentPage -= 1
-                }
-            } receiveValue: { [weak self] coins in
-                self?.allCoins.append(contentsOf: coins)
+        Task {
+            await fetchCoinsPage(page: currentPage)
+        }
+    }
+    
+    @MainActor
+    private func fetchCoinsPage(page: Int) async {
+        do {
+            let response = try await APIService.shared.fetchCoins(page: page, perPage: pageSize)
+            
+            if page == 1 {
+                self.allCoins = response.coins
+            } else {
+                self.allCoins.append(contentsOf: response.coins)
             }
-            .store(in: &cancellables)
+            
+            self.activeAPIs = [response.source]
+            self.isLoaded = true
+        } catch {
+            self.error = error.localizedDescription
+            if page > 1 {
+                self.currentPage -= 1 // Geri al
+            }
+        }
+        
+        self.isRefreshing = false
+        self.isLoadingMore = false
     }
 } 
