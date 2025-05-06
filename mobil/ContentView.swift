@@ -1,9 +1,14 @@
 import SwiftUI
 
 struct ContentView: View {
+    @EnvironmentObject var networkMonitor: NetworkMonitorViewModel
+    
     var body: some View {
         MainTabView()
-            .preferredColorScheme(.dark)
+            .onAppear {
+                // APIService'e networkMonitor'u ver
+                APIService.shared.configure(with: networkMonitor)
+            }
     }
 }
 
