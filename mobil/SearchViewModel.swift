@@ -1,14 +1,16 @@
+import Foundation
 import SwiftUI
 import Combine
 
 // Burada tanımlanan NewsItem silindi, projede zaten var
 
 class SearchViewModel: ObservableObject {
-    @Published var searchText: String = ""
+    @Published var searchText = ""
+    @Published var topCoins: [Coin] = []
     @Published var filteredCoins: [Coin] = []
-    @Published var filteredNews: [NewsItem] = []
-    @Published var isLoading: Bool = false
-    @Published var error: String? = nil
+    @Published var isLoading = false
+    @Published var isSearching = false
+    @Published var errorMessage: String? = nil
     
     private var allCoins: [Coin] = []
     private var allNews: [NewsItem] = []
@@ -17,34 +19,44 @@ class SearchViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     init() {
+        // Debounce ile arama özelliği
         $searchText
-            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
-            .removeDuplicates()
-            .sink { [weak self] text in
-                self?.applyFilters()
+            .debounce(for: .seconds(0.3), scheduler: RunLoop.main)
+            .sink { [weak self] _ in
+                Task {
+                    await self?.filterCoins()
+                }
             }
             .store(in: &cancellables)
     }
     
     func loadInitialData() {
         Task {
-            await fetchCoins()
+            await loadTopCoins()
             await fetchDemoNews()
         }
     }
     
     @MainActor
-    func fetchCoins() async {
+    func loadTopCoins() async {
+        guard topCoins.isEmpty else { return }
+        
         isLoading = true
+        errorMessage = nil
+        
         do {
+            // En popüler 100 coini getir
             let response = try await APIService.shared.fetchCoins(page: 1, perPage: 100)
+            self.topCoins = response.coins
+            
+            // Tüm yüklenen coinleri sakla (arama için)
             self.allCoins = response.coins
-            self.coinsLoaded = true
-            self.applyFilters()
+            
+            isLoading = false
         } catch {
-            self.error = error.localizedDescription
+            isLoading = false
+            handleError(error)
         }
-        isLoading = false
     }
     
     @MainActor
@@ -81,20 +93,91 @@ class SearchViewModel: ObservableObject {
         isLoading = false
     }
     
+    @MainActor
+    func filterCoins() async {
+        guard !searchText.isEmpty else {
+            filteredCoins = []
+            isSearching = false
+            return
+        }
+        
+        // Arama yapılırken yükleme durumunu göster
+        if !isSearching {
+            isSearching = true
+        }
+        
+        // Önce yerel verilerle eşleşmeyi dene
+        let localResults = performLocalSearch()
+        
+        if !localResults.isEmpty {
+            // Yerel sonuçlar varsa onları kullan
+            self.filteredCoins = localResults
+            self.isSearching = false
+            return
+        }
+        
+        // Yerel sonuç bulunamadıysa API'den ara
+        do {
+            // Yeni sayfa yükle ve üzerinde arama yap
+            let response = try await APIService.shared.fetchCoins(page: 1, perPage: 200)
+            
+            // Yeni verileri sakla
+            self.allCoins.append(contentsOf: response.coins.filter { coin in
+                !self.allCoins.contains(where: { $0.id == coin.id })
+            })
+            
+            // Arama yap
+            self.filteredCoins = performLocalSearch()
+            self.isSearching = false
+        } catch {
+            self.isSearching = false
+            // Arama sırasındaki hatalar için kullanıcıya bildirim gösterme
+            print("Arama hatası: \(error)")
+        }
+    }
+    
+    private func performLocalSearch() -> [Coin] {
+        let searchTermLowercased = searchText.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        return allCoins.filter { coin in
+            coin.name.lowercased().contains(searchTermLowercased) ||
+            coin.symbol.lowercased().contains(searchTermLowercased)
+        }.sorted { $0.marketCap > $1.marketCap }
+    }
+    
+    private func handleError(_ error: Error) {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .allAPIsFailed:
+                errorMessage = "Arama yapılamıyor. İnternet bağlantınızı kontrol edin."
+            case .rateLimitExceeded:
+                errorMessage = "API hız sınırı aşıldı. Lütfen daha sonra tekrar deneyin."
+            default:
+                errorMessage = "Veri yüklenirken bir sorun oluştu. Lütfen tekrar deneyin."
+            }
+        } else if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet:
+                errorMessage = "İnternet bağlantısı yok."
+            case .timedOut:
+                errorMessage = "Bağlantı zaman aşımına uğradı."
+            default:
+                errorMessage = "Ağ hatası: \(urlError.localizedDescription)"
+            }
+        } else {
+            errorMessage = "Bir hata oluştu: \(error.localizedDescription)"
+        }
+    }
+    
     private func applyFilters() {
         let text = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if text.isEmpty {
             filteredCoins = []
-            filteredNews = []
             return
         }
         filteredCoins = allCoins.filter { coin in
             coin.name.localizedCaseInsensitiveContains(text) ||
             coin.symbol.localizedCaseInsensitiveContains(text)
-        }
-        filteredNews = allNews.filter { news in
-            news.title.localizedCaseInsensitiveContains(text) ||
-            news.description.localizedCaseInsensitiveContains(text)
         }
     }
 } 
