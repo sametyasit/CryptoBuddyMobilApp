@@ -3,213 +3,371 @@ import Charts
 import Foundation
 
 struct CoinListView: View {
-    @State private var coins: [Coin] = []
-    @State private var isLoading = false
-    @State private var currentPage = 1
-    @State private var errorMessage: String?
-    @State private var showError = false
-    @State private var currentAPI = "CoinGecko"
-    @State private var selectedCoinId: String? = nil
+    @StateObject private var viewModel = CoinListViewModel()
     @State private var showCoinDetail = false
+    @State private var selectedCoinId: String? = nil
+    @State private var isFirstLoad = true
     
     var body: some View {
         ZStack {
+            Color.black.edgesIgnoringSafeArea(.all)
+            
             VStack {
-                if !coins.isEmpty {
+                // API Kaynağı ve Yenileme Butonu
+                if !viewModel.coins.isEmpty {
                     HStack {
-                        Text("Data from: \(currentAPI)")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                            .padding(.horizontal)
+                        HStack(spacing: 6) {
+                            Image(systemName: "globe")
+                                .foregroundColor(AppColorsTheme.gold)
+                                .font(.caption)
+                            Text("Kaynak: \(viewModel.currentAPI)")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.3))
+                        .cornerRadius(12)
+                        
                         Spacer()
+                        
+                        Button(action: {
+                            Task { 
+                                await viewModel.refresh()
+                            }
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(AppColorsTheme.gold)
+                        }
                     }
+                    .padding(.horizontal)
+                    .padding(.vertical, 4)
                 }
                 
-                List {
-                    ForEach(coins) { coin in
-                        Button(action: {
-                            selectedCoinId = coin.id
-                            showCoinDetail = true
-                        }) {
-                            CoinRow(coin: coin)
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                    
-                    if !coins.isEmpty {
-                        HStack {
-                            Spacer()
-                            Button(action: loadMoreCoins) {
-                                Text("Load More")
-                                    .foregroundColor(AppColorsTheme.gold)
-                                    .padding()
+                // List veya error/loading
+                if viewModel.coins.isEmpty && viewModel.errorMessage == nil && !viewModel.isLoading {
+                    // İlk yükleme
+                    Text("Coinler yükleniyor...")
+                        .foregroundColor(.gray)
+                        .onAppear {
+                            if isFirstLoad {
+                                Task {
+                                    await viewModel.fetchCoins()
+                                    isFirstLoad = false
+                                }
                             }
-                            Spacer()
                         }
-                        .listRowBackground(Color.clear)
+                } else if let errorMessage = viewModel.errorMessage {
+                    VStack(spacing: 20) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 50))
+                            .foregroundColor(.yellow)
+                            .padding(.bottom, 10)
+                        
+                        Text("Hata Oluştu")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
+                        Text(errorMessage)
+                            .font(.body)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        
+                        Button(action: {
+                            Task {
+                                await viewModel.refresh()
+                            }
+                        }) {
+                            Text("Tekrar Dene")
+                                .font(.headline)
+                                .foregroundColor(.black)
+                                .padding(.vertical, 10)
+                                .padding(.horizontal, 20)
+                                .background(AppColorsTheme.gold)
+                                .cornerRadius(10)
+                        }
+                        .padding(.top, 10)
                     }
-                }
-                .background(AppColorsTheme.black)
-                .listStyle(PlainListStyle())
-                .refreshable {
-                    currentPage = 1
-                    await fetchCoins()
+                    .padding()
+                } else {
+                    // Header
+                    HStack {
+                        Text("#")
+                            .frame(width: 30, alignment: .center)
+                        
+                        Text("Coin")
+                            .frame(width: 120, alignment: .leading)
+                        
+                        Spacer()
+                        
+                        Text("Fiyat")
+                            .frame(width: 100, alignment: .trailing)
+                        
+                        Text("24s")
+                            .frame(width: 70, alignment: .trailing)
+                    }
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .padding(.horizontal)
+                    .padding(.bottom, 5)
+                    
+                    // Coin Listesi
+                    ScrollView {
+                        LazyVStack(spacing: 15) {
+                            ForEach(viewModel.coins) { coin in
+                                Button(action: {
+                                    self.selectedCoinId = coin.id
+                                    self.showCoinDetail = true
+                                }) {
+                                    CoinRowView(coin: coin)
+                                        .padding(.horizontal)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                            
+                            // Sonraki Sayfa Yükleme
+                            if !viewModel.allPagesLoaded && !viewModel.isLoadingMore {
+                                Button(action: {
+                                    Task {
+                                        await viewModel.loadMoreCoins()
+                                    }
+                                }) {
+                                    Text("Daha Fazla Yükle")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(AppColorsTheme.gold)
+                                        .padding(.vertical, 10)
+                                        .frame(maxWidth: .infinity)
+                                        .background(Color.black.opacity(0.3))
+                                        .cornerRadius(8)
+                                }
+                                .padding(.horizontal)
+                                .padding(.vertical, 5)
+                            }
+                            
+                            if viewModel.isLoadingMore {
+                                HStack {
+                                    Spacer()
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
+                                        .scaleEffect(1.0)
+                                    Spacer()
+                                }
+                                .padding(.vertical, 10)
+                            }
+                        }
+                    }
+                    .refreshable {
+                        await viewModel.refresh()
+                    }
                 }
             }
             
-            if isLoading && coins.isEmpty {
-                ProgressView()
-                    .scaleEffect(1.5)
-                    .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
-            }
-        }
-        .alert("Error", isPresented: $showError) {
-            Button("Retry", role: .none) {
-                Task {
-                    currentPage = 1
-                    await fetchCoins()
+            // Tam ekran yükleme indikatörü
+            if viewModel.isLoading && viewModel.coins.isEmpty {
+                Color.black.opacity(0.7)
+                    .ignoresSafeArea()
+                
+                VStack(spacing: 15) {
+                    ProgressView()
+                        .scaleEffect(1.5)
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
+                    
+                    Text("Veriler yükleniyor...")
+                        .foregroundColor(.white)
+                        .font(.subheadline)
                 }
             }
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(errorMessage ?? "An unknown error occurred")
-        }
-        .onAppear {
-            if coins.isEmpty {
-                loadCoins()
+            
+            // Mini yükleme indikatörü (zaten veriler varken)
+            if viewModel.isLoading && !viewModel.coins.isEmpty {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
+                            .padding(10)
+                            .background(Color.black.opacity(0.7))
+                            .cornerRadius(10)
+                            .padding(.bottom, 20)
+                            .padding(.trailing, 20)
+                    }
+                }
             }
         }
         .fullScreenCover(isPresented: $showCoinDetail) {
             if let coinId = selectedCoinId {
                 NavigationView {
-                    TemporaryCoinDetailView(coinId: coinId)
+                    CoinDetailView(coinId: coinId)
+                        .navigationBarItems(leading: Button(action: {
+                            self.showCoinDetail = false
+                        }) {
+                            Image(systemName: "xmark")
+                                .foregroundColor(.white)
+                                .padding(8)
+                                .background(Color.black.opacity(0.5))
+                                .clipShape(Circle())
+                        })
+                        .navigationBarTitleDisplayMode(.inline)
                 }
             }
         }
     }
+}
+
+// CoinListViewModel'i daha verimli hale getirelim
+final class CoinListViewModel: ObservableObject {
+    @Published var coins: [Coin] = []
+    @Published var isLoading = false
+    @Published var isLoadingMore = false
+    @Published var errorMessage: String? = nil
+    @Published var currentAPI = ""
+    @Published var allPagesLoaded = false
     
-    private func loadCoins() {
-        Task {
-            await fetchCoins()
-        }
-    }
+    private var currentPage = 1
+    private let coinsPerPage = 20 // 30'dan 20'ye düşür - daha hızlı ilk yükleme
     
-    private func loadMoreCoins() {
-        currentPage += 1
-        Task {
-            await fetchCoins()
-        }
-    }
-    
-    private func fetchCoins() async {
+    @MainActor
+    func fetchCoins() async {
         isLoading = true
         do {
-            let newCoins = try await APIService.shared.fetchCoins(page: currentPage, perPage: 30)
+            let fetchResult = try await APIService.shared.fetchCoins(page: currentPage, perPage: coinsPerPage)
+            let newCoins = fetchResult.coins
+            let apiSource = fetchResult.source
+            
             if currentPage == 1 {
                 coins = newCoins
             } else {
                 coins.append(contentsOf: newCoins)
             }
             
-            // Update the current API source based on the image URL pattern
-            if let firstCoin = newCoins.first {
-                if firstCoin.image.contains("assets.coincap.io") {
-                    currentAPI = "CoinCap"
-                } else if firstCoin.image.contains("bin.bnbstatic.com") {
-                    currentAPI = "Binance"
-                } else {
-                    currentAPI = "CoinGecko"
-                }
-            }
+            // API kaynağını güncelle
+            currentAPI = apiSource
+            
+            // Tüm sayfalar yüklendi mi kontrol et
+            allPagesLoaded = newCoins.count < coinsPerPage
+            
         } catch APIError.allAPIsFailed {
-            errorMessage = "Unable to fetch data from any API source. Please check your internet connection and try again."
-            showError = true
+            errorMessage = "Hiçbir API kaynağından veri alınamadı. Lütfen internet bağlantınızı kontrol edin."
         } catch {
-            errorMessage = error.localizedDescription
-            showError = true
+            errorMessage = "Veri yüklenirken bir hata oluştu: \(error.localizedDescription)"
         }
         isLoading = false
     }
+    
+    @MainActor
+    func loadMoreCoins() async {
+        guard !isLoadingMore, !allPagesLoaded else { return }
+        
+        isLoadingMore = true
+        currentPage += 1
+        
+        do {
+            let fetchResult = try await APIService.shared.fetchCoins(page: currentPage, perPage: coinsPerPage)
+            let newCoins = fetchResult.coins
+            
+            coins.append(contentsOf: newCoins)
+            
+            // Tüm sayfalar yüklendi mi kontrol et
+            allPagesLoaded = newCoins.count < coinsPerPage
+            
+        } catch {
+            // Hata durumunda sayfa sayısını geri al
+            currentPage -= 1
+            errorMessage = "Daha fazla coin yüklenirken hata oluştu."
+        }
+        
+        isLoadingMore = false
+    }
+    
+    @MainActor
+    func refresh() async {
+        currentPage = 1
+        errorMessage = nil
+        allPagesLoaded = false
+        await fetchCoins()
+    }
 }
 
-struct CoinRow: View {
+// Coin satırı görünümü
+struct CoinRowView: View {
     let coin: Coin
     
     var body: some View {
-        HStack(spacing: 12) {
-            // Rank number
-            Text("#\(coin.rank)")
-                .font(.subheadline)
+        HStack(spacing: 5) {
+            // Sıralama
+            Text("\(coin.rank)")
+                .font(.system(size: 14))
                 .foregroundColor(.gray)
-                .frame(width: 40, alignment: .leading)
+                .frame(width: 30, alignment: .center)
             
-            // Coin logo
-            if let url = URL(string: coin.image), !coin.image.isEmpty {
-                CachedAsyncImage(url: url) { phase in
-                    switch phase {
-                    case .empty:
-                        Image(systemName: "bitcoinsign.circle")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .foregroundColor(.gray.opacity(0.3))
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                    case .failure:
-                        Image(systemName: "bitcoinsign.circle")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .foregroundColor(.gray.opacity(0.3))
-                    @unknown default:
-                        EmptyView()
+            // Logo ve isim
+            HStack(spacing: 8) {
+                if let url = URL(string: coin.image) {
+                    CachedAsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 30, height: 30)
+                                .clipShape(Circle())
+                        case .empty:
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 30, height: 30)
+                        case .failure:
+                            Circle()
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 30, height: 30)
+                                .overlay(
+                                    Text(coin.symbol.prefix(1))
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(.gray)
+                                )
+                        @unknown default:
+                            EmptyView()
+                        }
                     }
                 }
-                .frame(width: 32, height: 32)
-            } else {
-                Image(systemName: "bitcoinsign.circle")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .foregroundColor(.gray.opacity(0.3))
-                    .frame(width: 32, height: 32)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(coin.name)
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundColor(.white)
+                    
+                    Text(coin.symbol)
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                }
             }
-            
-            // Coin name and symbol
-            VStack(alignment: .leading, spacing: 2) {
-                Text(coin.symbol)
-                    .font(.headline)
-                    .foregroundColor(.white)
-                Text(coin.name)
-                    .font(.subheadline)
-                    .foregroundColor(.gray)
-            }
+            .frame(width: 120, alignment: .leading)
             
             Spacer()
             
-            // Price and change
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(coin.formattedPrice)
-                    .font(.headline)
-                    .foregroundColor(.white)
-                HStack(spacing: 4) {
-                    Image(systemName: coin.change24h >= 0 ? "arrow.up.right" : "arrow.down.right")
-                        .font(.caption)
-                        .foregroundColor(coin.change24h >= 0 ? .green : .red)
-                    Text(coin.formattedChange)
-                        .font(.subheadline)
-                        .foregroundColor(coin.change24h >= 0 ? .green : .red)
-                }
+            // Fiyat
+            Text(coin.formattedPrice)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(.white)
+                .frame(width: 100, alignment: .trailing)
+            
+            // 24 saatlik değişim
+            HStack(spacing: 3) {
+                Image(systemName: coin.change24h >= 0 ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                    .font(.system(size: 10))
+                    .foregroundColor(coin.changeColor)
+                
+                Text(coin.formattedChange)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(coin.changeColor)
             }
+            .frame(width: 70, alignment: .trailing)
         }
         .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(AppColorsTheme.darkGray)
-                .shadow(color: Color.black.opacity(0.3), radius: 2, x: 0, y: 1)
-        )
+        .contentShape(Rectangle())
+        .background(Color.black.opacity(0.001)) // Daha iyi tap alanı için
     }
 }
 
