@@ -1,5 +1,7 @@
 import Foundation
 import Combine
+import Network
+import SwiftUI
 
 class APIService {
     static let shared = APIService()
@@ -10,16 +12,43 @@ class APIService {
     private let cryptoPanicURL = "https://cryptopanic.com/api/v1"
     private let newsAPIURL = "https://newsapi.org/v2"
     private let coinStatsAPI = "https://api.coinstats.app/public/v1"
+    private let coinMarketCapURL = "https://pro-api.coinmarketcap.com/v1"
+    
+    // Yeni eklenen alternatif API'ler
+    private let cryptoCompareURL = "https://min-api.cryptocompare.com/data"
+    private let coinLayerURL = "https://api.coinlayer.com"
+    private let coinPaprikaURL = "https://api.coinpaprika.com/v1"
     
     // Add your API keys here
+    private let coinGeckoKey = "CG-Ld9nYXMFXXHFBGBKASqQj12H"
     private let cryptoPanicKey = "ac278e4633ac912593fdf81fae619aa4fe7bd8d1"
     private let newsAPIKey = "d718195189714c7f87c9aa19fabc0169"
     private let coinStatsKey = "nygWaH29Z4o0H6DizGxfm0S2/3MT2Ud46fQojcGGAR8="
+    private let coinMarketCapKey = "b54bcf4d-1bca-4e8e-9a24-22ff2c3d462c"
+    
+    // Yeni eklenen API anahtarları
+    private let cryptoCompareKey = "4c47e8b9732aabe507ac0be25e1daf2f0d63dd7277bb46e1438b141b8cf2dd2c"
+    private let coinLayerKey = "5a46adb51e8e2d3cdb96fb2ba88a3500"
+    // CoinPaprika ücretsiz key gerektirmiyor
+    
+    // EnvironmentObject için bir referans
+    private var networkMonitor: NetworkMonitorViewModel?
     
     private var newsTimer: Timer?
     private var newsUpdateCallback: (([NewsItem]) -> Void)?
     
     private init() {}
+    
+    // Environment Object'i ayarlamak için metod
+    func configure(with networkMonitor: NetworkMonitorViewModel) {
+        self.networkMonitor = networkMonitor
+    }
+    
+    // Ağ bağlantısını kontrol et
+    private var isConnectedToNetwork: Bool {
+        // Eğer networkMonitor yoksa varsayılan olarak bağlı kabul et
+        return networkMonitor?.isConnected ?? true
+    }
     
     // MARK: - Coin Methods
     
@@ -59,8 +88,9 @@ class APIService {
     
     // Önbellek için yapı
     private var coinCache: [String: (timestamp: Date, response: APIResponse)] = [:]
-    private let cacheValidDuration: TimeInterval = 30 // 30 saniye
+    private let cacheValidDuration: TimeInterval = 60 // 30 saniyeden 60 saniyeye çıkarıldı
     
+    @Sendable
     func fetchCoins(page: Int, perPage: Int) async throws -> APIResponse {
         print("🔍 Fetching coins page \(page) with \(perPage) per page")
         
@@ -68,128 +98,264 @@ class APIService {
         let cacheKey = "coins_\(page)_\(perPage)"
         if let cached = coinCache[cacheKey], 
            Date().timeIntervalSince(cached.timestamp) < cacheValidDuration {
-            print("✅ Using cached coin data for page \(page)")
+            print("✅ Önbellekten veri kullanılıyor (sayfa \(page))")
             return cached.response
         }
         
         var errors: [Error] = []
         
-        // Try CoinGecko with a shorter timeout
+        // 1. Try CoinGecko API
         do {
-            print("🔍 Trying CoinGecko API...")
+            print("🔍 CoinGecko API deneniyor...")
             let coins = try await fetchCoinsFromCoinGecko(page: page, perPage: perPage)
-            print("✅ CoinGecko success: \(coins.count) coins")
+            print("✅ CoinGecko başarılı: \(coins.count) coin")
             let response = APIResponse(coins: coins, source: "CoinGecko")
             
             // Önbelleğe kaydet
             coinCache[cacheKey] = (Date(), response)
             return response
         } catch {
-            print("❌ CoinGecko failed: \(error)")
+            print("❌ CoinGecko başarısız: \(error)")
             errors.append(error)
             
-            // Try CoinStats with a shorter timeout
+            // 2. Try CoinMarketCap API
             do {
-                print("🔍 Trying CoinStats API...")
-                let coins = try await fetchCoinsFromCoinStats(limit: perPage, skip: (page - 1) * perPage)
-                print("✅ CoinStats success: \(coins.count) coins")
-                let response = APIResponse(coins: coins, source: "CoinStats")
+                print("🔍 CoinMarketCap API deneniyor...")
+                let start = (page - 1) * perPage + 1
+                let coins = try await fetchCoinsFromCoinMarketCap(limit: perPage, start: start)
+                print("✅ CoinMarketCap başarılı: \(coins.count) coin")
+                let response = APIResponse(coins: coins, source: "CoinMarketCap")
                 
                 // Önbelleğe kaydet
                 coinCache[cacheKey] = (Date(), response)
                 return response
             } catch {
-                print("❌ CoinStats failed: \(error)")
+                print("❌ CoinMarketCap başarısız: \(error)")
                 errors.append(error)
                 
-                // Try CoinCap with a shorter timeout
+                // 3. Try CoinStats API
                 do {
-                    print("🔍 Trying CoinCap API...")
-                    let coins = try await fetchCoinsFromCoinCap(limit: perPage, offset: (page - 1) * perPage)
-                    print("✅ CoinCap success: \(coins.count) coins")
-                    let response = APIResponse(coins: coins, source: "CoinCap")
+                    print("🔍 CoinStats API deneniyor...")
+                    let coins = try await fetchCoinsFromCoinStats(limit: perPage, skip: (page - 1) * perPage)
+                    print("✅ CoinStats başarılı: \(coins.count) coin")
+                    let response = APIResponse(coins: coins, source: "CoinStats")
                     
                     // Önbelleğe kaydet
                     coinCache[cacheKey] = (Date(), response)
                     return response
                 } catch {
-                    print("❌ CoinCap failed: \(error)")
+                    print("❌ CoinStats başarısız: \(error)")
                     errors.append(error)
                     
-                    // If all APIs failed, throw a specific error
-                    print("❌❌❌ All API sources failed!")
-                    throw APIError.allAPIsFailed
+                    // 4. Try CoinCap API
+                    do {
+                        print("🔍 CoinCap API deneniyor...")
+                        let coins = try await fetchCoinsFromCoinCap(limit: perPage, offset: (page - 1) * perPage)
+                        print("✅ CoinCap başarılı: \(coins.count) coin")
+                        let response = APIResponse(coins: coins, source: "CoinCap")
+                        
+                        // Önbelleğe kaydet
+                        coinCache[cacheKey] = (Date(), response)
+                        return response
+                    } catch {
+                        print("❌ CoinCap başarısız: \(error)")
+                        errors.append(error)
+                        
+                        // 5. Try CryptoCompare API (Yeni eklenen)
+                        do {
+                            print("🔍 CryptoCompare API deneniyor...")
+                            let coins = try await fetchCoinsFromCryptoCompare(limit: perPage)
+                            print("✅ CryptoCompare başarılı: \(coins.count) coin")
+                            let response = APIResponse(coins: coins, source: "CryptoCompare")
+                            
+                            // Önbelleğe kaydet
+                            coinCache[cacheKey] = (Date(), response)
+                            return response
+                        } catch {
+                            print("❌ CryptoCompare başarısız: \(error)")
+                            errors.append(error)
+                            
+                            // 6. Try CoinLayer API (Yeni eklenen)
+                            do {
+                                print("🔍 CoinLayer API deneniyor...")
+                                let coins = try await fetchCoinsFromCoinLayer()
+                                print("✅ CoinLayer başarılı: \(coins.count) coin")
+                                let response = APIResponse(coins: coins, source: "CoinLayer")
+                                
+                                // Önbelleğe kaydet
+                                coinCache[cacheKey] = (Date(), response)
+                                return response
+                            } catch {
+                                print("❌ CoinLayer başarısız: \(error)")
+                                errors.append(error)
+                                
+                                // 7. Try CoinPaprika API (Yeni eklenen)
+                                do {
+                                    print("🔍 CoinPaprika API deneniyor...")
+                                    let coins = try await fetchCoinsFromCoinPaprika(limit: perPage)
+                                    print("✅ CoinPaprika başarılı: \(coins.count) coin")
+                                    let response = APIResponse(coins: coins, source: "CoinPaprika")
+                                    
+                                    // Önbelleğe kaydet
+                                    coinCache[cacheKey] = (Date(), response)
+                                    return response
+                                } catch {
+                                    print("❌ CoinPaprika başarısız: \(error)")
+                                    errors.append(error)
+                                    
+                                    // Tüm API'ler başarısız oldu
+                                    print("❌❌❌ Tüm API kaynakları başarısız!")
+                                    print("🚨 Hatalar: \(errors.map { "\($0)" }.joined(separator: ", "))")
+                                    throw APIError.allAPIsFailed
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
     
     private func fetchCoinsFromCoinGecko(page: Int, perPage: Int) async throws -> [Coin] {
+        // API yanıtını daha detaylı inceleyelim
+        print("🔄 CoinGecko API isteği başlatılıyor - Sayfa: \(page), Adet: \(perPage)")
+        
+        // CoinGecko için ücretsiz API endpoint'i 
+        // Not: Ücretsiz plan rate limitleri var, Pro için farklı endpoint kullanılır
         let urlString = "\(coinGeckoURL)/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=\(perPage)&page=\(page)&sparkline=false&price_change_percentage=24h"
         
         guard let url = URL(string: urlString) else {
+            print("❌ CoinGecko: Geçersiz URL: \(urlString)")
             throw APIError.invalidURL
         }
         
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 5 // Timeout süresini 10 saniyeden 5 saniyeye düşür
+        // Print network connectivity status
+        print("🌐 Ağ bağlantısı var mı: \(isConnectedToNetwork ? "Evet" : "Hayır")")
         
-        // Retry logic - Max 1 retry (reduced from 2)
+        if !isConnectedToNetwork {
+            print("❌ CoinGecko: Ağ bağlantısı yok!")
+            throw URLError(.notConnectedToInternet)
+        }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15 // 10 saniyeden 15 saniyeye çıkardık
+        
+        // API anahtarı ekleme - ücretsiz plan API anahtarı kullanmıyor ama Pro için gerekli
+        if !coinGeckoKey.isEmpty {
+            request.addValue(coinGeckoKey, forHTTPHeaderField: "x-cg-pro-api-key")
+        }
+        
+        // User-Agent ekle - API'nin isteği bloke etmemesi için
+        request.addValue("CryptoBuddy/1.0", forHTTPHeaderField: "User-Agent")
+        
+        // Debugging
+        print("🔍 CoinGecko isteği: \(urlString)")
+        
+        // Retry logic - Max 2 retries
         var attempts = 0
-        let maxAttempts = 1
+        let maxAttempts = 2 
         
         while attempts <= maxAttempts {
             do {
+                print("⏱️ CoinGecko API isteği gönderiliyor. Deneme: \(attempts + 1)")
+                
                 let (data, response) = try await URLSession.shared.data(for: request)
                 
                 guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ CoinGecko: HTTP yanıtı alınamadı")
                     throw APIError.invalidResponse
+                }
+                
+                print("🌐 CoinGecko API HTTP Status: \(httpResponse.statusCode)")
+                
+                // Başlıkları göster
+                if let headers = httpResponse.allHeaderFields as? [String: String] {
+                    print("📋 HTTP Başlıklar: \(headers)")
+                    
+                    // Rate limit bilgisini kontrol et
+                    if let rateLimit = headers["x-ratelimit-limit"],
+                       let rateRemaining = headers["x-ratelimit-remaining"] {
+                        print("📊 Rate Limit: \(rateLimit), Kalan: \(rateRemaining)")
+                    }
                 }
                 
                 if (200...299).contains(httpResponse.statusCode) {
                     let decoder = JSONDecoder()
-                    let coins = try decoder.decode([CoinGeckoData].self, from: data)
                     
-                    return coins.map { coinData in
-                        Coin(
-                            id: coinData.id,
-                            name: coinData.name,
-                            symbol: coinData.symbol.uppercased(),
-                            price: coinData.currentPrice,
-                            change24h: coinData.priceChangePercentage24h,
-                            marketCap: coinData.marketCap,
-                            image: coinData.image,
-                            rank: coinData.marketCapRank ?? 0
-                        )
+                    // JSON verisini yazdırın (debug için)
+                    if let jsonString = String(data: data, encoding: .utf8) {
+                        print("📝 İlk 200 karakter: \(String(jsonString.prefix(200)))")
+                    }
+                    
+                    do {
+                        let coins = try decoder.decode([CoinGeckoData].self, from: data)
+                        print("✅ CoinGecko başarılı: \(coins.count) coin çekildi")
+                        
+                        return coins.map { coinData in
+                            Coin(
+                                id: coinData.id,
+                                name: coinData.name,
+                                symbol: coinData.symbol.uppercased(),
+                                price: coinData.currentPrice,
+                                change24h: coinData.priceChangePercentage24h,
+                                marketCap: coinData.marketCap,
+                                image: coinData.image,
+                                rank: coinData.marketCapRank ?? 0
+                            )
+                        }
+                    } catch {
+                        print("❌ CoinGecko: JSON decode hatası: \(error)")
+                        print("❌ JSON: \(String(data: data, encoding: .utf8) ?? "Veri okunamadı")")
+                        throw APIError.decodingError
                     }
                 } else if httpResponse.statusCode == 429 {
                     // Rate limit aşıldı, yeniden dene
-                    print("⚠️ CoinGecko rate limit exceeded, attempt \(attempts+1)/\(maxAttempts+1)")
+                    print("⚠️ CoinGecko rate limit aşıldı, deneme \(attempts+1)/\(maxAttempts+1)")
                     attempts += 1
                     if attempts <= maxAttempts {
                         // Her yeni denemede bekleme süresini arttır
-                        try await Task.sleep(nanoseconds: UInt64(500_000_000)) // 0.5 saniye
+                        let waitTime = Double(attempts) * 2.0 // Artan bekleme süresi
+                        print("⏱️ \(waitTime) saniye bekleniyor...")
+                        try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000)) // 2, 4 saniye...
                         continue
+                    }
+                    throw APIError.rateLimitExceeded
+                } else if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                    print("❌ CoinGecko: API anahtarı hatası veya erişim reddedildi: \(httpResponse.statusCode)")
+                    // Hata mesajını yazdır
+                    if let errorText = String(data: data, encoding: .utf8) {
+                        print("🚫 Hata mesajı: \(errorText)")
                     }
                     throw APIError.invalidResponse
                 } else {
+                    print("❌ CoinGecko: Beklenmeyen HTTP durum kodu: \(httpResponse.statusCode)")
+                    // Hata mesajını yazdır
+                    if let errorText = String(data: data, encoding: .utf8) {
+                        print("🚫 Hata mesajı: \(errorText)")
+                    }
                     throw APIError.invalidResponse
                 }
             } catch URLError.timedOut {
-                print("⚠️ CoinGecko request timed out, attempt \(attempts+1)/\(maxAttempts+1)")
+                print("⚠️ CoinGecko: İstek zaman aşımına uğradı, deneme \(attempts+1)/\(maxAttempts+1)")
                 attempts += 1
                 if attempts <= maxAttempts {
-                    try await Task.sleep(nanoseconds: UInt64(500_000_000)) // 0.5 saniye
+                    try await Task.sleep(nanoseconds: UInt64(1_000_000_000)) // 1 saniye bekle
                     continue
                 }
                 throw URLError(.timedOut)
+            } catch URLError.notConnectedToInternet {
+                print("❌ CoinGecko: İnternet bağlantısı yok!")
+                throw URLError(.notConnectedToInternet)
             } catch {
+                // Spesifik hata mesajlarını yazdır
+                print("❌ CoinGecko: Hata: \(error.localizedDescription)")
                 // Diğer hatalar için direkt throw et
                 throw error
             }
         }
         
         // Tüm denemeler başarısız oldu
+        print("❌❌ CoinGecko: Tüm denemeler başarısız")
         throw APIError.invalidResponse
     }
     
@@ -253,68 +419,226 @@ class APIService {
     }
     
     private func fetchCoinsFromCoinCap(limit: Int, offset: Int = 0) async throws -> [Coin] {
+        // CoinCap API anahtarı - güncel bir anahtar ile değiştirin
+        let coinCapApiKey = "26549c5e-3e55-4e90-b622-fe68338fcaf7"
+        
         let urlString = "\(coinCapURL)/assets?limit=\(limit)&offset=\(offset)"
         
         guard let url = URL(string: urlString) else {
+            print("❌ CoinCap: Geçersiz URL: \(urlString)")
             throw APIError.invalidURL
         }
         
         var request = URLRequest(url: url)
-        request.timeoutInterval = 5 // 15 saniyeden 5 saniyeye düşür
+        // API anahtarını ekle
+        if !coinCapApiKey.isEmpty {
+            request.addValue(coinCapApiKey, forHTTPHeaderField: "Authorization")
+        }
+        request.timeoutInterval = 10 // Daha uzun timeout
         
-        // Retry logic - Max 1 retry
+        print("🔍 CoinCap isteği: \(urlString)")
+        
+        // Retry logic - Max 2 retries
         var attempts = 0
-        let maxAttempts = 1 // 2'den 1'e düşür
+        let maxAttempts = 2
         
         while attempts <= maxAttempts {
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
                 
                 guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ CoinCap: HTTP yanıtı alınamadı")
                     throw APIError.invalidResponse
                 }
                 
+                print("🌐 CoinCap API HTTP Status: \(httpResponse.statusCode)")
+                
                 if (200...299).contains(httpResponse.statusCode) {
                     let decoder = JSONDecoder()
-                    let coinCapResponse = try decoder.decode(CoinCapResponse.self, from: data)
                     
-                    return coinCapResponse.data.enumerated().map { index, coinData in
-                        Coin(
-                            id: coinData.id,
-                            name: coinData.name,
-                            symbol: coinData.symbol.uppercased(),
-                            price: Double(coinData.priceUsd) ?? 0,
-                            change24h: Double(coinData.changePercent24Hr) ?? 0,
-                            marketCap: Double(coinData.marketCapUsd) ?? 0,
-                            image: "https://assets.coincap.io/assets/icons/\(coinData.symbol.lowercased())@2x.png",
-                            rank: Int(coinData.rank) ?? (offset + index + 1)
-                        )
+                    // JSON verisini yazdırın (debug için)
+                    if let jsonString = String(data: data, encoding: .utf8) {
+                        print("📝 CoinCap yanıt (ilk 100): \(String(jsonString.prefix(100)))")
+                    }
+                    
+                    do {
+                        let coinCapResponse = try decoder.decode(CoinCapResponse.self, from: data)
+                        print("✅ CoinCap başarılı: \(coinCapResponse.data.count) coin çekildi")
+                        
+                        return coinCapResponse.data.enumerated().map { index, coinData in
+                            Coin(
+                                id: coinData.id,
+                                name: coinData.name,
+                                symbol: coinData.symbol.uppercased(),
+                                price: Double(coinData.priceUsd) ?? 0,
+                                change24h: Double(coinData.changePercent24Hr) ?? 0,
+                                marketCap: Double(coinData.marketCapUsd) ?? 0,
+                                image: "https://assets.coincap.io/assets/icons/\(coinData.symbol.lowercased())@2x.png",
+                                rank: Int(coinData.rank) ?? (offset + index + 1)
+                            )
+                        }
+                    } catch {
+                        print("❌ CoinCap: JSON decode hatası: \(error)")
+                        throw APIError.decodingError
                     }
                 } else if httpResponse.statusCode == 429 {
                     // Rate limit aşıldı, yeniden dene
-                    print("⚠️ CoinCap rate limit exceeded, attempt \(attempts+1)/\(maxAttempts+1)")
+                    print("⚠️ CoinCap rate limit aşıldı, deneme \(attempts+1)/\(maxAttempts+1)")
                     attempts += 1
                     if attempts <= maxAttempts {
-                        try await Task.sleep(nanoseconds: UInt64(500_000_000)) // 0.5 saniye
+                        let waitTime = Double(attempts) * 2.0
+                        print("⏱️ \(waitTime) saniye bekleniyor...")
+                        try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
                         continue
+                    }
+                    throw APIError.rateLimitExceeded
+                } else if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                    print("❌ CoinCap: API anahtarı hatası veya erişim reddedildi: \(httpResponse.statusCode)")
+                    // Hata mesajını yazdır
+                    if let errorText = String(data: data, encoding: .utf8) {
+                        print("🚫 Hata mesajı: \(errorText)")
                     }
                     throw APIError.invalidResponse
                 } else {
+                    print("❌ CoinCap: Beklenmeyen HTTP durum kodu: \(httpResponse.statusCode)")
+                    // Hata mesajını yazdır
+                    if let errorText = String(data: data, encoding: .utf8) {
+                        print("🚫 Hata mesajı: \(errorText)")
+                    }
                     throw APIError.invalidResponse
                 }
             } catch URLError.timedOut {
-                print("⚠️ CoinCap request timed out, attempt \(attempts+1)/\(maxAttempts+1)")
+                print("⚠️ CoinCap: İstek zaman aşımına uğradı, deneme \(attempts+1)/\(maxAttempts+1)")
                 attempts += 1
                 if attempts <= maxAttempts {
-                    try await Task.sleep(nanoseconds: UInt64(500_000_000)) // 0.5 saniye
+                    try await Task.sleep(nanoseconds: UInt64(1_000_000_000))
                     continue
                 }
                 throw URLError(.timedOut)
             } catch {
+                print("❌ CoinCap: Hata: \(error.localizedDescription)")
                 throw error
             }
         }
         
+        print("❌❌ CoinCap: Tüm denemeler başarısız")
+        throw APIError.invalidResponse
+    }
+    
+    private func fetchCoinsFromCoinMarketCap(limit: Int, start: Int = 1) async throws -> [Coin] {
+        let urlString = "\(coinMarketCapURL)/cryptocurrency/listings/latest"
+        
+        guard let url = URL(string: urlString) else {
+            print("❌ CoinMarketCap: Geçersiz URL: \(urlString)")
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 10
+        
+        // API anahtarını ekle (CoinMarketCap için gerekli)
+        request.addValue(coinMarketCapKey, forHTTPHeaderField: "X-CMC_PRO_API_KEY")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        
+        // Parametreleri ekle
+        let parameters = [
+            "start": "\(start)",
+            "limit": "\(limit)",
+            "convert": "USD"
+        ]
+        
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        components.queryItems = parameters.map { URLQueryItem(name: $0.key, value: $0.value) }
+        
+        if let paramURL = components.url {
+            request.url = paramURL
+        }
+        
+        print("🔍 CoinMarketCap isteği: \(request.url?.absoluteString ?? urlString)")
+        
+        // Retry logic
+        var attempts = 0
+        let maxAttempts = 2
+        
+        while attempts <= maxAttempts {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ CoinMarketCap: HTTP yanıtı alınamadı")
+                    throw APIError.invalidResponse
+                }
+                
+                print("🌐 CoinMarketCap API HTTP Status: \(httpResponse.statusCode)")
+                
+                if (200...299).contains(httpResponse.statusCode) {
+                    // JSON verisini yazdırın (debug için)
+                    if let jsonString = String(data: data, encoding: .utf8) {
+                        print("📝 CoinMarketCap yanıt (ilk 100): \(String(jsonString.prefix(100)))")
+                    }
+                    
+                    do {
+                        let decoder = JSONDecoder()
+                        let coinMarketCapResponse = try decoder.decode(CoinMarketCapResponse.self, from: data)
+                        print("✅ CoinMarketCap başarılı: \(coinMarketCapResponse.data.count) coin çekildi")
+                        
+                        return coinMarketCapResponse.data.map { coinData in
+                            let usdQuote = coinData.quote["USD"] ?? CoinMarketCapQuote(price: 0, volume24h: 0, percentChange24h: 0, marketCap: 0)
+                            
+                            return Coin(
+                                id: "\(coinData.id)".lowercased(), // CoinMarketCap farklı ID formatı kullanır
+                                name: coinData.name,
+                                symbol: coinData.symbol,
+                                price: usdQuote.price,
+                                change24h: usdQuote.percentChange24h,
+                                marketCap: usdQuote.marketCap,
+                                image: "https://s2.coinmarketcap.com/static/img/coins/64x64/\(coinData.id).png",
+                                rank: coinData.cmcRank
+                            )
+                        }
+                    } catch {
+                        print("❌ CoinMarketCap: JSON decode hatası: \(error)")
+                        throw APIError.decodingError
+                    }
+                } else if httpResponse.statusCode == 429 {
+                    print("⚠️ CoinMarketCap rate limit aşıldı, deneme \(attempts+1)/\(maxAttempts+1)")
+                    attempts += 1
+                    if attempts <= maxAttempts {
+                        let waitTime = Double(attempts) * 2.0
+                        print("⏱️ \(waitTime) saniye bekleniyor...")
+                        try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000))
+                        continue
+                    }
+                    throw APIError.rateLimitExceeded
+                } else if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+                    print("❌ CoinMarketCap: API anahtarı hatası: \(httpResponse.statusCode)")
+                    // Hata mesajını yazdır
+                    if let errorText = String(data: data, encoding: .utf8) {
+                        print("🚫 Hata mesajı: \(errorText)")
+                    }
+                    throw APIError.invalidResponse
+                } else {
+                    print("❌ CoinMarketCap: Beklenmeyen HTTP durum kodu: \(httpResponse.statusCode)")
+                    if let errorText = String(data: data, encoding: .utf8) {
+                        print("🚫 Hata mesajı: \(errorText)")
+                    }
+                    throw APIError.invalidResponse
+                }
+            } catch URLError.timedOut {
+                print("⚠️ CoinMarketCap: İstek zaman aşımına uğradı, deneme \(attempts+1)/\(maxAttempts+1)")
+                attempts += 1
+                if attempts <= maxAttempts {
+                    try await Task.sleep(nanoseconds: UInt64(1_000_000_000))
+                    continue
+                }
+                throw URLError(.timedOut)
+            } catch {
+                print("❌ CoinMarketCap: Hata: \(error.localizedDescription)")
+                throw error
+            }
+        }
+        
+        print("❌❌ CoinMarketCap: Tüm denemeler başarısız")
         throw APIError.invalidResponse
     }
     
@@ -353,6 +677,7 @@ class APIService {
         }
     }
     
+    @Sendable
     public func fetchNews() async throws -> [NewsItem] {
         print("📰 Starting to fetch news from all sources...")
         var allNews: [NewsItem] = []
@@ -498,6 +823,7 @@ class APIService {
     private var coinDetailCache: [String: (timestamp: Date, coin: Coin)] = [:]
     private let detailCacheValidDuration: TimeInterval = 120 // 2 dakika
     
+    @Sendable
     func fetchCoinDetails(coinId: String) async throws -> Coin {
         print("🔍 Fetching detailed information for coin ID: \(coinId)")
         
@@ -535,12 +861,12 @@ class APIService {
                         enhancedCoin.graphData = try await fetchCoinPriceHistory(coinId: coinId)
                         
                         // Önbelleğe kaydet (bu başarılı olursa)
-                        coinDetailCache[coinId] = (Date(), enhancedCoin)
+                        coinDetailCache[coin.id] = (Date(), enhancedCoin)
                         return enhancedCoin
                     } catch {
                         print("⚠️ Could not fetch price history: \(error)")
                         // Temel veriyi önbelleğe kaydet
-                        coinDetailCache[coinId] = (Date(), coin)
+                        coinDetailCache[coin.id] = (Date(), coin)
                         return coin // Return basic coin data
                     }
                 } else {
@@ -674,6 +1000,7 @@ class APIService {
         }
     }
     
+    @Sendable
     func fetchCoinPriceHistory(coinId: String, days: Int = 7) async throws -> [GraphPoint] {
         print("📈 Fetching price history for \(coinId) over \(days) days")
         var errors: [Error] = []
@@ -745,6 +1072,417 @@ class APIService {
             let timestamp = Double(dataPoint.time) / 1000
             let price = Double(dataPoint.priceUsd) ?? 0
             return GraphPoint(timestamp: timestamp, price: price)
+        }
+    }
+    
+    // MARK: - Yeni API metodları
+    
+    private func fetchCoinsFromCryptoCompare(limit: Int) async throws -> [Coin] {
+        print("🔄 CryptoCompare API isteği başlatılıyor - Limit: \(limit)")
+        
+        // CryptoCompare için en çok piyasa değerine sahip kripto paraları getiren endpoint
+        let urlString = "\(cryptoCompareURL)/top/mktcapfull?limit=\(limit)&tsym=USD"
+        
+        guard let url = URL(string: urlString) else {
+            print("❌ CryptoCompare: Geçersiz URL: \(urlString)")
+            throw APIError.invalidURL
+        }
+        
+        // Ağ bağlantısını kontrol et
+        print("🌐 Ağ bağlantısı var mı: \(isConnectedToNetwork ? "Evet" : "Hayır")")
+        
+        if !isConnectedToNetwork {
+            print("❌ CryptoCompare: Ağ bağlantısı yok!")
+            throw URLError(.notConnectedToInternet)
+        }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        
+        // API anahtarını ekle
+        request.addValue(cryptoCompareKey, forHTTPHeaderField: "authorization")
+        
+        // User-Agent ekle
+        request.addValue("CryptoBuddy/1.0", forHTTPHeaderField: "User-Agent")
+        
+        print("🔍 CryptoCompare isteği: \(urlString)")
+        
+        // Retry logic - Max 2 retries
+        var attempts = 0
+        let maxAttempts = 2
+        
+        while attempts <= maxAttempts {
+            do {
+                print("⏱️ CryptoCompare API isteği gönderiliyor. Deneme: \(attempts + 1)")
+                
+                let (data, response) = try await URLSession.shared.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ CryptoCompare: HTTP yanıtı alınamadı")
+                    throw APIError.invalidResponse
+                }
+                
+                print("🌐 CryptoCompare API HTTP Status: \(httpResponse.statusCode)")
+                
+                if (200...299).contains(httpResponse.statusCode) {
+                    // Debug için JSON verisini yazdır
+                    if let jsonString = String(data: data, encoding: .utf8) {
+                        print("📝 İlk 200 karakter: \(String(jsonString.prefix(200)))")
+                    }
+                    
+                    do {
+                        let decoder = JSONDecoder()
+                        let response = try decoder.decode(CryptoCompareResponse.self, from: data)
+                        print("✅ CryptoCompare başarılı: \(response.Data.count) coin çekildi")
+                        
+                        return response.Data.map { coinData in
+                            let price = coinData.RAW?.USD?.PRICE ?? 0
+                            let change24h = coinData.RAW?.USD?.CHANGEPCT24HOUR ?? 0
+                            let marketCap = coinData.RAW?.USD?.MKTCAP ?? 0
+                            
+                            return Coin(
+                                id: coinData.CoinInfo.Name.lowercased(),
+                                name: coinData.CoinInfo.FullName,
+                                symbol: coinData.CoinInfo.Name,
+                                price: price,
+                                change24h: change24h,
+                                marketCap: marketCap,
+                                image: "https://www.cryptocompare.com\(coinData.CoinInfo.ImageUrl)",
+                                rank: coinData.CoinInfo.SortOrder
+                            )
+                        }
+                    } catch {
+                        print("❌ CryptoCompare: JSON decode hatası: \(error)")
+                        print("❌ JSON: \(String(data: data, encoding: .utf8) ?? "Veri okunamadı")")
+                        throw APIError.decodingError
+                    }
+                } else if httpResponse.statusCode == 429 {
+                    print("⚠️ CryptoCompare rate limit aşıldı, deneme \(attempts+1)/\(maxAttempts+1)")
+                    attempts += 1
+                    if attempts <= maxAttempts {
+                        try await Task.sleep(nanoseconds: UInt64(2_000_000_000))
+                        continue
+                    }
+                    throw APIError.rateLimitExceeded
+                } else {
+                    print("❌ CryptoCompare: Beklenmeyen HTTP durum kodu: \(httpResponse.statusCode)")
+                    throw APIError.invalidResponse
+                }
+            } catch URLError.timedOut {
+                print("⚠️ CryptoCompare: İstek zaman aşımına uğradı, deneme \(attempts+1)/\(maxAttempts+1)")
+                attempts += 1
+                if attempts <= maxAttempts {
+                    try await Task.sleep(nanoseconds: UInt64(1_000_000_000))
+                    continue
+                }
+                throw URLError(.timedOut)
+            } catch URLError.notConnectedToInternet {
+                print("❌ CryptoCompare: İnternet bağlantısı yok!")
+                throw URLError(.notConnectedToInternet)
+            } catch {
+                print("❌ CryptoCompare: Hata: \(error.localizedDescription)")
+                throw error
+            }
+        }
+        
+        print("❌❌ CryptoCompare: Tüm denemeler başarısız")
+        throw APIError.invalidResponse
+    }
+    
+    private func fetchCoinsFromCoinLayer() async throws -> [Coin] {
+        print("🔄 CoinLayer API isteği başlatılıyor")
+        
+        // CoinLayer için tüm kripto paraları getiren endpoint
+        let urlString = "\(coinLayerURL)/live?access_key=\(coinLayerKey)"
+        
+        guard let url = URL(string: urlString) else {
+            print("❌ CoinLayer: Geçersiz URL: \(urlString)")
+            throw APIError.invalidURL
+        }
+        
+        // Ağ bağlantısını kontrol et
+        print("🌐 Ağ bağlantısı var mı: \(isConnectedToNetwork ? "Evet" : "Hayır")")
+        
+        if !isConnectedToNetwork {
+            print("❌ CoinLayer: Ağ bağlantısı yok!")
+            throw URLError(.notConnectedToInternet)
+        }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        
+        print("🔍 CoinLayer isteği: \(urlString)")
+        
+        // Retry logic
+        var attempts = 0
+        let maxAttempts = 2
+        
+        while attempts <= maxAttempts {
+            do {
+                print("⏱️ CoinLayer API isteği gönderiliyor. Deneme: \(attempts + 1)")
+                
+                let (data, response) = try await URLSession.shared.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ CoinLayer: HTTP yanıtı alınamadı")
+                    throw APIError.invalidResponse
+                }
+                
+                print("🌐 CoinLayer API HTTP Status: \(httpResponse.statusCode)")
+                
+                if (200...299).contains(httpResponse.statusCode) {
+                    if let jsonString = String(data: data, encoding: .utf8) {
+                        print("📝 İlk 200 karakter: \(String(jsonString.prefix(200)))")
+                    }
+                    
+                    do {
+                        let decoder = JSONDecoder()
+                        let response = try decoder.decode(CoinLayerResponse.self, from: data)
+                        
+                        if !response.success {
+                            print("❌ CoinLayer başarısız yanıt: \(response.error?.info ?? "Bilinmeyen hata")")
+                            throw APIError.invalidResponse
+                        }
+                        
+                        var coins: [Coin] = []
+                        var rank = 1
+                        
+                        for (symbol, price) in response.rates {
+                            // CoinLayer sadece fiyat bilgisi veriyor, diğer bilgileri varsayılan değerlerle dolduralım
+                            coins.append(Coin(
+                                id: symbol.lowercased(),
+                                name: symbol,
+                                symbol: symbol,
+                                price: price,
+                                change24h: 0, // CoinLayer'da değişim verisi yok
+                                marketCap: 0, // CoinLayer'da market cap verisi yok
+                                image: "https://assets.coinlayer.com/icons/\(symbol.lowercased()).png",
+                                rank: rank
+                            ))
+                            rank += 1
+                        }
+                        
+                        print("✅ CoinLayer başarılı: \(coins.count) coin çekildi")
+                        return coins
+                    } catch {
+                        print("❌ CoinLayer: JSON decode hatası: \(error)")
+                        print("❌ JSON: \(String(data: data, encoding: .utf8) ?? "Veri okunamadı")")
+                        throw APIError.decodingError
+                    }
+                } else {
+                    print("❌ CoinLayer: Beklenmeyen HTTP durum kodu: \(httpResponse.statusCode)")
+                    throw APIError.invalidResponse
+                }
+            } catch URLError.timedOut {
+                print("⚠️ CoinLayer: İstek zaman aşımına uğradı, deneme \(attempts+1)/\(maxAttempts+1)")
+                attempts += 1
+                if attempts <= maxAttempts {
+                    try await Task.sleep(nanoseconds: UInt64(1_000_000_000))
+                    continue
+                }
+                throw URLError(.timedOut)
+            } catch {
+                print("❌ CoinLayer: Hata: \(error.localizedDescription)")
+                throw error
+            }
+        }
+        
+        print("❌❌ CoinLayer: Tüm denemeler başarısız")
+        throw APIError.invalidResponse
+    }
+    
+    private func fetchCoinsFromCoinPaprika(limit: Int) async throws -> [Coin] {
+        print("🔄 CoinPaprika API isteği başlatılıyor - Limit: \(limit)")
+        
+        // CoinPaprika için tüm kripto paraları getiren endpoint
+        let urlString = "\(coinPaprikaURL)/tickers"
+        
+        guard let url = URL(string: urlString) else {
+            print("❌ CoinPaprika: Geçersiz URL: \(urlString)")
+            throw APIError.invalidURL
+        }
+        
+        // Ağ bağlantısını kontrol et
+        print("🌐 Ağ bağlantısı var mı: \(isConnectedToNetwork ? "Evet" : "Hayır")")
+        
+        if !isConnectedToNetwork {
+            print("❌ CoinPaprika: Ağ bağlantısı yok!")
+            throw URLError(.notConnectedToInternet)
+        }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        
+        print("🔍 CoinPaprika isteği: \(urlString)")
+        
+        // Retry logic
+        var attempts = 0
+        let maxAttempts = 2
+        
+        while attempts <= maxAttempts {
+            do {
+                print("⏱️ CoinPaprika API isteği gönderiliyor. Deneme: \(attempts + 1)")
+                
+                let (data, response) = try await URLSession.shared.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ CoinPaprika: HTTP yanıtı alınamadı")
+                    throw APIError.invalidResponse
+                }
+                
+                print("🌐 CoinPaprika API HTTP Status: \(httpResponse.statusCode)")
+                
+                if (200...299).contains(httpResponse.statusCode) {
+                    if let jsonString = String(data: data, encoding: .utf8) {
+                        print("📝 İlk 200 karakter: \(String(jsonString.prefix(200)))")
+                    }
+                    
+                    do {
+                        let decoder = JSONDecoder()
+                        let coins = try decoder.decode([CoinPaprikaData].self, from: data)
+                        
+                        // Limit uygula
+                        let limitedCoins = Array(coins.prefix(limit))
+                        
+                        print("✅ CoinPaprika başarılı: \(limitedCoins.count) coin çekildi")
+                        
+                        return limitedCoins.map { coinData in
+                            return Coin(
+                                id: coinData.id,
+                                name: coinData.name,
+                                symbol: coinData.symbol,
+                                price: coinData.quotes.USD.price,
+                                change24h: coinData.quotes.USD.percentChange24h,
+                                marketCap: coinData.quotes.USD.marketCap,
+                                image: "https://static.coinpaprika.com/coin/\(coinData.id)/logo.png",
+                                rank: coinData.rank
+                            )
+                        }
+                    } catch {
+                        print("❌ CoinPaprika: JSON decode hatası: \(error)")
+                        print("❌ JSON: \(String(data: data, encoding: .utf8) ?? "Veri okunamadı")")
+                        throw APIError.decodingError
+                    }
+                } else if httpResponse.statusCode == 429 {
+                    print("⚠️ CoinPaprika rate limit aşıldı, deneme \(attempts+1)/\(maxAttempts+1)")
+                    attempts += 1
+                    if attempts <= maxAttempts {
+                        try await Task.sleep(nanoseconds: UInt64(2_000_000_000))
+                        continue
+                    }
+                    throw APIError.rateLimitExceeded
+                } else {
+                    print("❌ CoinPaprika: Beklenmeyen HTTP durum kodu: \(httpResponse.statusCode)")
+                    throw APIError.invalidResponse
+                }
+            } catch URLError.timedOut {
+                print("⚠️ CoinPaprika: İstek zaman aşımına uğradı, deneme \(attempts+1)/\(maxAttempts+1)")
+                attempts += 1
+                if attempts <= maxAttempts {
+                    try await Task.sleep(nanoseconds: UInt64(1_000_000_000))
+                    continue
+                }
+                throw URLError(.timedOut)
+            } catch URLError.notConnectedToInternet {
+                print("❌ CoinPaprika: İnternet bağlantısı yok!")
+                throw URLError(.notConnectedToInternet)
+            } catch {
+                print("❌ CoinPaprika: Hata: \(error.localizedDescription)")
+                throw error
+            }
+        }
+        
+        print("❌❌ CoinPaprika: Tüm denemeler başarısız")
+        throw APIError.invalidResponse
+    }
+    
+    // MARK: - Yeni API Modelleri
+    
+    // CryptoCompare API Modelleri
+    struct CryptoCompareResponse: Codable {
+        let Data: [CryptoCompareData]
+        let Message: String
+        let type: Int
+        
+        enum CodingKeys: String, CodingKey {
+            case Data, Message
+            case type = "Type"
+        }
+    }
+
+    struct CryptoCompareData: Codable {
+        let CoinInfo: CryptoCoinInfo
+        let RAW: CryptoRawData?
+        let DISPLAY: CryptoDisplayData?
+    }
+
+    struct CryptoCoinInfo: Codable {
+        let Id: String
+        let Name: String
+        let FullName: String
+        let ImageUrl: String
+        let SortOrder: Int
+    }
+
+    struct CryptoRawData: Codable {
+        let USD: CryptoUsdData?
+    }
+
+    struct CryptoUsdData: Codable {
+        let PRICE: Double
+        let CHANGEPCT24HOUR: Double
+        let MKTCAP: Double
+    }
+
+    struct CryptoDisplayData: Codable {
+        let USD: CryptoUsdDisplayData?
+    }
+
+    struct CryptoUsdDisplayData: Codable {
+        let PRICE: String
+        let CHANGEPCT24HOUR: String
+        let MKTCAP: String
+    }
+    
+    // CoinLayer API Modelleri
+    struct CoinLayerResponse: Codable {
+        let success: Bool
+        let terms: String?
+        let privacy: String?
+        let timestamp: Int?
+        let target: String?
+        let rates: [String: Double]
+        let error: CoinLayerError?
+    }
+
+    struct CoinLayerError: Codable {
+        let code: Int
+        let type: String
+        let info: String
+    }
+    
+    // CoinPaprika API Modelleri
+    struct CoinPaprikaData: Codable {
+        let id: String
+        let name: String
+        let symbol: String
+        let rank: Int
+        let quotes: CoinPaprikaQuotes
+    }
+
+    struct CoinPaprikaQuotes: Codable {
+        let USD: CoinPaprikaUSD
+    }
+
+    struct CoinPaprikaUSD: Codable {
+        let price: Double
+        let marketCap: Double
+        let percentChange24h: Double
+        
+        enum CodingKeys: String, CodingKey {
+            case price
+            case marketCap = "market_cap"
+            case percentChange24h = "percent_change_24h"
         }
     }
     
@@ -830,6 +1568,52 @@ class APIService {
             let time: Int64
         }
     }
+    
+    // CoinMarketCap için model sınıfları
+    struct CoinMarketCapResponse: Codable {
+        let status: CoinMarketCapStatus
+        let data: [CoinMarketCapData]
+    }
+    
+    struct CoinMarketCapStatus: Codable {
+        let timestamp: String
+        let errorCode: Int
+        let errorMessage: String?
+        
+        enum CodingKeys: String, CodingKey {
+            case timestamp
+            case errorCode = "error_code"
+            case errorMessage = "error_message"
+        }
+    }
+    
+    struct CoinMarketCapData: Codable {
+        let id: Int
+        let name: String
+        let symbol: String
+        let cmcRank: Int
+        let quote: [String: CoinMarketCapQuote]
+        
+        enum CodingKeys: String, CodingKey {
+            case id, name, symbol
+            case cmcRank = "cmc_rank"
+            case quote
+        }
+    }
+    
+    struct CoinMarketCapQuote: Codable {
+        let price: Double
+        let volume24h: Double
+        let percentChange24h: Double
+        let marketCap: Double
+        
+        enum CodingKeys: String, CodingKey {
+            case price
+            case volume24h = "volume_24h"
+            case percentChange24h = "percent_change_24h"
+            case marketCap = "market_cap"
+        }
+    }
 }
 
 // MARK: - Models
@@ -840,6 +1624,7 @@ enum APIError: Error, Equatable {
     case decodingError
     case allAPIsFailed
     case coinNotFound
+    case rateLimitExceeded
 }
 
 // Define the operator function to fix the "Referencing operator function '~='" error
@@ -972,4 +1757,8 @@ struct CoinStatsNews: Codable {
     let imgURL: String?
     let source: String
     let feedDate: String
+}
+
+struct CoinStatisticsResult: Codable {
+    let type: Int
 } 
