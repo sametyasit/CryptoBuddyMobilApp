@@ -27,37 +27,91 @@ class APIService {
         return "https://assets.coingecko.com/coins/images/1/large/\(symbol.lowercased()).png"
     }
     
-    func fetchCoins(page: Int, perPage: Int) async throws -> [Coin] {
+    // API yanıt tipi için bir tuple döndürelim
+    struct APIResponse {
+        let coins: [Coin]
+        let source: String
+        
+        func first(where predicate: (Coin) -> Bool) -> Coin? {
+            return coins.first(where: predicate)
+        }
+        
+        var first: Coin? {
+            return coins.first
+        }
+        
+        var count: Int {
+            return coins.count
+        }
+        
+        subscript(index: Int) -> Coin {
+            return coins[index]
+        }
+        
+        func map<T>(_ transform: (Coin) -> T) -> [T] {
+            return coins.map(transform)
+        }
+        
+        func filter(_ isIncluded: (Coin) -> Bool) -> [Coin] {
+            return coins.filter(isIncluded)
+        }
+    }
+    
+    // Önbellek için yapı
+    private var coinCache: [String: (timestamp: Date, response: APIResponse)] = [:]
+    private let cacheValidDuration: TimeInterval = 30 // 30 saniye
+    
+    func fetchCoins(page: Int, perPage: Int) async throws -> APIResponse {
         print("🔍 Fetching coins page \(page) with \(perPage) per page")
-        var allCoins: [Coin] = []
+        
+        // Önbellekten kontrol et
+        let cacheKey = "coins_\(page)_\(perPage)"
+        if let cached = coinCache[cacheKey], 
+           Date().timeIntervalSince(cached.timestamp) < cacheValidDuration {
+            print("✅ Using cached coin data for page \(page)")
+            return cached.response
+        }
+        
         var errors: [Error] = []
         
-        // Try CoinGecko
+        // Try CoinGecko with a shorter timeout
         do {
             print("🔍 Trying CoinGecko API...")
-            allCoins = try await fetchCoinsFromCoinGecko(page: page, perPage: perPage)
-            print("✅ CoinGecko success: \(allCoins.count) coins")
-            return allCoins
+            let coins = try await fetchCoinsFromCoinGecko(page: page, perPage: perPage)
+            print("✅ CoinGecko success: \(coins.count) coins")
+            let response = APIResponse(coins: coins, source: "CoinGecko")
+            
+            // Önbelleğe kaydet
+            coinCache[cacheKey] = (Date(), response)
+            return response
         } catch {
             print("❌ CoinGecko failed: \(error)")
             errors.append(error)
             
-            // Try CoinStats
+            // Try CoinStats with a shorter timeout
             do {
                 print("🔍 Trying CoinStats API...")
-                allCoins = try await fetchCoinsFromCoinStats(limit: perPage, skip: (page - 1) * perPage)
-                print("✅ CoinStats success: \(allCoins.count) coins")
-                return allCoins
+                let coins = try await fetchCoinsFromCoinStats(limit: perPage, skip: (page - 1) * perPage)
+                print("✅ CoinStats success: \(coins.count) coins")
+                let response = APIResponse(coins: coins, source: "CoinStats")
+                
+                // Önbelleğe kaydet
+                coinCache[cacheKey] = (Date(), response)
+                return response
             } catch {
                 print("❌ CoinStats failed: \(error)")
                 errors.append(error)
                 
-                // Try CoinCap
+                // Try CoinCap with a shorter timeout
                 do {
                     print("🔍 Trying CoinCap API...")
-                    allCoins = try await fetchCoinsFromCoinCap(limit: perPage, offset: (page - 1) * perPage)
-                    print("✅ CoinCap success: \(allCoins.count) coins")
-                    return allCoins
+                    let coins = try await fetchCoinsFromCoinCap(limit: perPage, offset: (page - 1) * perPage)
+                    print("✅ CoinCap success: \(coins.count) coins")
+                    let response = APIResponse(coins: coins, source: "CoinCap")
+                    
+                    // Önbelleğe kaydet
+                    coinCache[cacheKey] = (Date(), response)
+                    return response
                 } catch {
                     print("❌ CoinCap failed: \(error)")
                     errors.append(error)
@@ -78,57 +132,124 @@ class APIService {
         }
         
         var request = URLRequest(url: url)
-        request.timeoutInterval = 10
+        request.timeoutInterval = 5 // Timeout süresini 10 saniyeden 5 saniyeye düşür
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        // Retry logic - Max 1 retry (reduced from 2)
+        var attempts = 0
+        let maxAttempts = 1
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
+        while attempts <= maxAttempts {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+                
+                if (200...299).contains(httpResponse.statusCode) {
+                    let decoder = JSONDecoder()
+                    let coins = try decoder.decode([CoinGeckoData].self, from: data)
+                    
+                    return coins.map { coinData in
+                        Coin(
+                            id: coinData.id,
+                            name: coinData.name,
+                            symbol: coinData.symbol.uppercased(),
+                            price: coinData.currentPrice,
+                            change24h: coinData.priceChangePercentage24h,
+                            marketCap: coinData.marketCap,
+                            image: coinData.image,
+                            rank: coinData.marketCapRank ?? 0
+                        )
+                    }
+                } else if httpResponse.statusCode == 429 {
+                    // Rate limit aşıldı, yeniden dene
+                    print("⚠️ CoinGecko rate limit exceeded, attempt \(attempts+1)/\(maxAttempts+1)")
+                    attempts += 1
+                    if attempts <= maxAttempts {
+                        // Her yeni denemede bekleme süresini arttır
+                        try await Task.sleep(nanoseconds: UInt64(500_000_000)) // 0.5 saniye
+                        continue
+                    }
+                    throw APIError.invalidResponse
+                } else {
+                    throw APIError.invalidResponse
+                }
+            } catch URLError.timedOut {
+                print("⚠️ CoinGecko request timed out, attempt \(attempts+1)/\(maxAttempts+1)")
+                attempts += 1
+                if attempts <= maxAttempts {
+                    try await Task.sleep(nanoseconds: UInt64(500_000_000)) // 0.5 saniye
+                    continue
+                }
+                throw URLError(.timedOut)
+            } catch {
+                // Diğer hatalar için direkt throw et
+                throw error
+            }
         }
         
-        let decoder = JSONDecoder()
-        let coins = try decoder.decode([CoinGeckoData].self, from: data)
-        
-        return coins.map { coinData in
-            Coin(
-                id: coinData.id,
-                name: coinData.name,
-                symbol: coinData.symbol.uppercased(),
-                price: coinData.currentPrice,
-                change24h: coinData.priceChangePercentage24h,
-                marketCap: coinData.marketCap,
-                image: coinData.image,
-                rank: coinData.marketCapRank ?? 0
-            )
-        }
+        // Tüm denemeler başarısız oldu
+        throw APIError.invalidResponse
     }
     
     private func fetchCoinsFromCoinStats(limit: Int, skip: Int = 0) async throws -> [Coin] {
         var request = URLRequest(url: URL(string: "\(coinStatsAPI)/coins?limit=\(limit)&skip=\(skip)")!)
         request.setValue(coinStatsKey, forHTTPHeaderField: "X-API-KEY")
-        request.timeoutInterval = 15
+        request.timeoutInterval = 5 // 15 saniyeden 5 saniyeye düşür
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        // Retry logic - Max 1 retry
+        var attempts = 0
+        let maxAttempts = 1 // 2'den 1'e düşür
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
+        while attempts <= maxAttempts {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+                
+                if (200...299).contains(httpResponse.statusCode) {
+                    let statsResponse = try JSONDecoder().decode(CoinStatsResponse.self, from: data)
+                    return statsResponse.coins.enumerated().map { index, coin in
+                        Coin(
+                            id: coin.id,
+                            name: coin.name,
+                            symbol: coin.symbol.uppercased(),
+                            price: coin.price,
+                            change24h: coin.priceChange1d,
+                            marketCap: coin.marketCap,
+                            image: coin.icon,
+                            rank: skip + index + 1
+                        )
+                    }
+                } else if httpResponse.statusCode == 429 {
+                    // Rate limit aşıldı, yeniden dene
+                    print("⚠️ CoinStats rate limit exceeded, attempt \(attempts+1)/\(maxAttempts+1)")
+                    attempts += 1
+                    if attempts <= maxAttempts {
+                        try await Task.sleep(nanoseconds: UInt64(500_000_000)) // 0.5 saniye
+                        continue
+                    }
+                    throw APIError.invalidResponse
+                } else {
+                    throw APIError.invalidResponse
+                }
+            } catch URLError.timedOut {
+                print("⚠️ CoinStats request timed out, attempt \(attempts+1)/\(maxAttempts+1)")
+                attempts += 1
+                if attempts <= maxAttempts {
+                    try await Task.sleep(nanoseconds: UInt64(500_000_000)) // 0.5 saniye
+                    continue
+                }
+                throw URLError(.timedOut)
+            } catch {
+                throw error
+            }
         }
         
-        let statsResponse = try JSONDecoder().decode(CoinStatsResponse.self, from: data)
-        return statsResponse.coins.enumerated().map { index, coin in
-            Coin(
-                id: coin.id,
-                name: coin.name,
-                symbol: coin.symbol.uppercased(),
-                price: coin.price,
-                change24h: coin.priceChange1d,
-                marketCap: coin.marketCap,
-                image: coin.icon,
-                rank: skip + index + 1
-            )
-        }
+        throw APIError.invalidResponse
     }
     
     private func fetchCoinsFromCoinCap(limit: Int, offset: Int = 0) async throws -> [Coin] {
@@ -139,30 +260,62 @@ class APIService {
         }
         
         var request = URLRequest(url: url)
-        request.timeoutInterval = 15
+        request.timeoutInterval = 5 // 15 saniyeden 5 saniyeye düşür
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        // Retry logic - Max 1 retry
+        var attempts = 0
+        let maxAttempts = 1 // 2'den 1'e düşür
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
+        while attempts <= maxAttempts {
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    throw APIError.invalidResponse
+                }
+                
+                if (200...299).contains(httpResponse.statusCode) {
+                    let decoder = JSONDecoder()
+                    let coinCapResponse = try decoder.decode(CoinCapResponse.self, from: data)
+                    
+                    return coinCapResponse.data.enumerated().map { index, coinData in
+                        Coin(
+                            id: coinData.id,
+                            name: coinData.name,
+                            symbol: coinData.symbol.uppercased(),
+                            price: Double(coinData.priceUsd) ?? 0,
+                            change24h: Double(coinData.changePercent24Hr) ?? 0,
+                            marketCap: Double(coinData.marketCapUsd) ?? 0,
+                            image: "https://assets.coincap.io/assets/icons/\(coinData.symbol.lowercased())@2x.png",
+                            rank: Int(coinData.rank) ?? (offset + index + 1)
+                        )
+                    }
+                } else if httpResponse.statusCode == 429 {
+                    // Rate limit aşıldı, yeniden dene
+                    print("⚠️ CoinCap rate limit exceeded, attempt \(attempts+1)/\(maxAttempts+1)")
+                    attempts += 1
+                    if attempts <= maxAttempts {
+                        try await Task.sleep(nanoseconds: UInt64(500_000_000)) // 0.5 saniye
+                        continue
+                    }
+                    throw APIError.invalidResponse
+                } else {
+                    throw APIError.invalidResponse
+                }
+            } catch URLError.timedOut {
+                print("⚠️ CoinCap request timed out, attempt \(attempts+1)/\(maxAttempts+1)")
+                attempts += 1
+                if attempts <= maxAttempts {
+                    try await Task.sleep(nanoseconds: UInt64(500_000_000)) // 0.5 saniye
+                    continue
+                }
+                throw URLError(.timedOut)
+            } catch {
+                throw error
+            }
         }
         
-        let decoder = JSONDecoder()
-        let coinCapResponse = try decoder.decode(CoinCapResponse.self, from: data)
-        
-        return coinCapResponse.data.enumerated().map { index, coinData in
-            Coin(
-                id: coinData.id,
-                name: coinData.name,
-                symbol: coinData.symbol.uppercased(),
-                price: Double(coinData.priceUsd) ?? 0,
-                change24h: Double(coinData.changePercent24Hr) ?? 0,
-                marketCap: Double(coinData.marketCapUsd) ?? 0,
-                image: "https://assets.coincap.io/assets/icons/\(coinData.symbol.lowercased())@2x.png",
-                rank: Int(coinData.rank) ?? (offset + index + 1)
-            )
-        }
+        throw APIError.invalidResponse
     }
     
     // MARK: - News Methods
@@ -203,6 +356,7 @@ class APIService {
     public func fetchNews() async throws -> [NewsItem] {
         print("📰 Starting to fetch news from all sources...")
         var allNews: [NewsItem] = []
+        var errors: [Error] = []
         
         // CryptoPanic
         do {
@@ -212,6 +366,7 @@ class APIService {
             print("✅ CryptoPanic: Got \(cryptoPanicNews.count) news items")
         } catch {
             print("❌ CryptoPanic failed: \(error)")
+            errors.append(error)
         }
         
         // NewsAPI
@@ -222,6 +377,7 @@ class APIService {
             print("✅ NewsAPI: Got \(newsAPINews.count) news items")
         } catch {
             print("❌ NewsAPI failed: \(error)")
+            errors.append(error)
         }
         
         // CoinStats
@@ -232,10 +388,22 @@ class APIService {
             print("✅ CoinStats: Got \(coinStatsNews.count) news items")
         } catch {
             print("❌ CoinStats failed: \(error)")
+            errors.append(error)
         }
         
-        print("📰 Total news items: \(allNews.count)")
-        return allNews.sorted(by: >)
+        // En az bir kaynaktan veri aldıysak başarılı sayılır
+        if !allNews.isEmpty {
+            print("📰 Total news items: \(allNews.count)")
+            return allNews.sorted(by: >)
+        } else {
+            // Hiçbir kaynaktan veri gelmezse hata fırlat
+            print("❌❌❌ All news sources failed! Errors: \(errors)")
+            if errors.isEmpty {
+                throw APIError.invalidResponse
+            } else {
+                throw errors[0]
+            }
+        }
     }
     
     private func fetchCryptoPanicNews() async throws -> [NewsItem] {
@@ -323,6 +491,345 @@ class APIService {
             )
         }
     }
+    
+    // MARK: - Coin Detail Methods
+    
+    // Detay verisi için önbellek
+    private var coinDetailCache: [String: (timestamp: Date, coin: Coin)] = [:]
+    private let detailCacheValidDuration: TimeInterval = 120 // 2 dakika
+    
+    func fetchCoinDetails(coinId: String) async throws -> Coin {
+        print("🔍 Fetching detailed information for coin ID: \(coinId)")
+        
+        // Önbellekten kontrol et
+        if let cached = coinDetailCache[coinId],
+           Date().timeIntervalSince(cached.timestamp) < detailCacheValidDuration {
+            print("✅ Using cached detail data for coin: \(coinId)")
+            return cached.coin
+        }
+        
+        var errors: [Error] = []
+        
+        // Try CoinGecko first
+        do {
+            print("🔍 Trying CoinGecko API for details...")
+            let coinDetail = try await fetchCoinDetailsFromCoinGecko(coinId: coinId)
+            print("✅ CoinGecko detail success for \(coinId)")
+            
+            // Önbelleğe kaydet
+            coinDetailCache[coinId] = (Date(), coinDetail)
+            return coinDetail
+        } catch {
+            print("❌ CoinGecko detail failed: \(error)")
+            errors.append(error)
+            
+            // Try backup sources
+            do {
+                print("🔍 Trying to get basic coin data as fallback...")
+                let response = try await fetchCoins(page: 1, perPage: 100)
+                if let coin = response.coins.first(where: { $0.id == coinId }) {
+                    print("✅ Found basic coin data as fallback")
+                    // Try to enhance with price history
+                    do {
+                        var enhancedCoin = coin
+                        enhancedCoin.graphData = try await fetchCoinPriceHistory(coinId: coinId)
+                        
+                        // Önbelleğe kaydet (bu başarılı olursa)
+                        coinDetailCache[coinId] = (Date(), enhancedCoin)
+                        return enhancedCoin
+                    } catch {
+                        print("⚠️ Could not fetch price history: \(error)")
+                        // Temel veriyi önbelleğe kaydet
+                        coinDetailCache[coinId] = (Date(), coin)
+                        return coin // Return basic coin data
+                    }
+                } else {
+                    throw APIError.coinNotFound
+                }
+            } catch {
+                print("❌ All detailed data sources failed: \(error)")
+                throw APIError.allAPIsFailed
+            }
+        }
+    }
+    
+    private func fetchCoinDetailsFromCoinGecko(coinId: String) async throws -> Coin {
+        let detailUrlString = "\(coinGeckoURL)/coins/\(coinId)?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false"
+        let marketChartUrlString = "\(coinGeckoURL)/coins/\(coinId)/market_chart?vs_currency=usd&days=7"
+        
+        guard let detailUrl = URL(string: detailUrlString),
+              let marketChartUrl = URL(string: marketChartUrlString) else {
+            print("❌ Invalid URL for coinId: \(coinId)")
+            throw APIError.invalidURL
+        }
+        
+        // Timeout ve ağ hatalarını daha iyi yönetmek için URLSession yapılandırması
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 8  // 15 saniye -> 8 saniye
+        config.timeoutIntervalForResource = 15 // 30 saniye -> 15 saniye
+        let session = URLSession(configuration: config)
+        
+        let detailRequest = URLRequest(url: detailUrl)
+        let chartRequest = URLRequest(url: marketChartUrl)
+        
+        // İstek durumunu izleme
+        print("🔍 Requesting detail data from: \(detailUrl.absoluteString)")
+        print("🔍 Requesting chart data from: \(marketChartUrl.absoluteString)")
+        
+        // Paralel istek yapma yerine sıralı istek yapalım
+        do {
+            // İlk önce detay verilerini alalım
+            let (detailData, detailHttpResponse) = try await session.data(for: detailRequest)
+            
+            // Detay HTTP yanıtını kontrol ediyoruz
+            guard let detailHttpResponse = detailHttpResponse as? HTTPURLResponse else {
+                print("❌ Invalid detail response type")
+                throw APIError.invalidResponse
+            }
+            
+            // Hata durumunda HTTP durum kodunu yazdır
+            if !(200...299).contains(detailHttpResponse.statusCode) {
+                print("❌ Detail HTTP error: \(detailHttpResponse.statusCode)")
+                throw APIError.invalidResponse
+            }
+            
+            // JSON çözme hatalarını daha iyi yakalama
+            let decoder = JSONDecoder()
+            
+            // Detay verisini ayrıştırma
+            let detailResponse = try decoder.decode(CoinGeckoDetailResponse.self, from: detailData)
+            
+            // Create base coin object
+            var coin = Coin(
+                id: detailResponse.id,
+                name: detailResponse.name,
+                symbol: detailResponse.symbol.uppercased(),
+                price: detailResponse.marketData.currentPrice["usd"] ?? 0,
+                change24h: detailResponse.marketData.priceChangePercentage24h ?? 0,
+                marketCap: detailResponse.marketData.marketCap["usd"] ?? 0,
+                image: detailResponse.image.large,
+                rank: detailResponse.marketCapRank ?? 0
+            )
+            
+            // Add additional data
+            coin.totalVolume = detailResponse.marketData.totalVolume["usd"] ?? 0
+            coin.high24h = detailResponse.marketData.high24h["usd"] ?? 0
+            coin.low24h = detailResponse.marketData.low24h["usd"] ?? 0
+            coin.priceChange24h = detailResponse.marketData.priceChange24h ?? 0
+            coin.ath = detailResponse.marketData.ath["usd"] ?? 0
+            coin.athChangePercentage = detailResponse.marketData.athChangePercentage["usd"] ?? 0
+            coin.description = detailResponse.description["en"] ?? ""
+            
+            // Add links
+            if !detailResponse.links.homepage.isEmpty {
+                coin.website = detailResponse.links.homepage.first ?? ""
+            }
+            if let twitter = detailResponse.links.twitterScreenName {
+                coin.twitter = "https://twitter.com/\(twitter)"
+            }
+            if let reddit = detailResponse.links.subredditUrl {
+                coin.reddit = reddit
+            }
+            if let repos = detailResponse.links.reposUrl.github, !repos.isEmpty {
+                coin.github = repos.first ?? ""
+            }
+            
+            // Önce temel detayları döndürüp, sonra arka planda chart verilerini alıp güncelleme yapalım
+            // Bu sayede kullanıcı daha hızlı yüklenen bir ekran görecek
+            
+            // Detay verilerinin asenkron olarak güncellenmesi için başka bir Task başlat
+            Task {
+                do {
+                    let (chartData, chartResponse) = try await session.data(for: chartRequest)
+                    
+                    if let chartHttpResponse = chartResponse as? HTTPURLResponse, 
+                       (200...299).contains(chartHttpResponse.statusCode) {
+                        do {
+                            let chartData = try decoder.decode(CoinGeckoChartResponse.self, from: chartData)
+                            let graphData = chartData.prices.map { dataPoint in
+                                GraphPoint(timestamp: dataPoint[0] / 1000, price: dataPoint[1])
+                            }
+                            
+                            // Grafiğin yüklenmesinden sonra önbelleği güncelleyelim
+                            if let cachedCoin = coinDetailCache[coin.id]?.coin {
+                                var updatedCoin = cachedCoin
+                                updatedCoin.graphData = graphData
+                                coinDetailCache[coin.id] = (Date(), updatedCoin)
+                            }
+                            
+                            print("✅ Chart data loaded successfully with \(graphData.count) points")
+                        } catch {
+                            print("⚠️ Failed to parse chart data: \(error)")
+                        }
+                    }
+                } catch {
+                    print("⚠️ Failed to load chart data: \(error)")
+                }
+            }
+            
+            return coin
+        } catch {
+            print("❌ Error fetching coin details: \(error)")
+            throw error
+        }
+    }
+    
+    func fetchCoinPriceHistory(coinId: String, days: Int = 7) async throws -> [GraphPoint] {
+        print("📈 Fetching price history for \(coinId) over \(days) days")
+        var errors: [Error] = []
+        
+        // Try CoinGecko
+        do {
+            let chartData = try await fetchCoinGeckoChartData(coinId: coinId, days: days)
+            return chartData
+        } catch {
+            errors.append(error)
+            print("❌ CoinGecko chart failed: \(error)")
+            
+            // Try CoinCap as fallback
+            do {
+                let chartData = try await fetchCoinCapChartData(coinId: coinId, days: days)
+                return chartData
+            } catch {
+                errors.append(error)
+                print("❌ CoinCap chart failed: \(error)")
+                
+                // If both failed, throw an error
+                throw APIError.allAPIsFailed
+            }
+        }
+    }
+    
+    private func fetchCoinGeckoChartData(coinId: String, days: Int) async throws -> [GraphPoint] {
+        let urlString = "\(coinGeckoURL)/coins/\(coinId)/market_chart?vs_currency=usd&days=\(days)"
+        
+        guard let url = URL(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.invalidResponse
+        }
+        
+        let decoder = JSONDecoder()
+        let chartResponse = try decoder.decode(CoinGeckoChartResponse.self, from: data)
+        
+        return chartResponse.prices.map { dataPoint in
+            GraphPoint(timestamp: dataPoint[0] / 1000, price: dataPoint[1])
+        }
+    }
+    
+    private func fetchCoinCapChartData(coinId: String, days: Int) async throws -> [GraphPoint] {
+        // Convert days to milliseconds
+        let interval = "d1" // d1 = daily data points
+        let urlString = "\(coinCapURL)/assets/\(coinId)/history?interval=\(interval)"
+        
+        guard let url = URL(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.invalidResponse
+        }
+        
+        let decoder = JSONDecoder()
+        let chartResponse = try decoder.decode(CoinCapHistoryResponse.self, from: data)
+        
+        return chartResponse.data.map { dataPoint in
+            let timestamp = Double(dataPoint.time) / 1000
+            let price = Double(dataPoint.priceUsd) ?? 0
+            return GraphPoint(timestamp: timestamp, price: price)
+        }
+    }
+    
+    // MARK: - Response Models
+    
+    // CoinGecko detailed coin response
+    struct CoinGeckoDetailResponse: Codable {
+        let id: String
+        let symbol: String
+        let name: String
+        let description: [String: String]
+        let image: CoinGeckoImage
+        let marketCapRank: Int?
+        let marketData: MarketData
+        let links: Links
+        
+        enum CodingKeys: String, CodingKey {
+            case id, symbol, name, description, image, links
+            case marketCapRank = "market_cap_rank"
+            case marketData = "market_data"
+        }
+        
+        struct CoinGeckoImage: Codable {
+            let thumb: String
+            let small: String
+            let large: String
+        }
+        
+        struct MarketData: Codable {
+            let currentPrice: [String: Double]
+            let ath: [String: Double]
+            let athChangePercentage: [String: Double]
+            let marketCap: [String: Double]
+            let totalVolume: [String: Double]
+            let high24h: [String: Double]
+            let low24h: [String: Double]
+            let priceChange24h: Double?
+            let priceChangePercentage24h: Double?
+            
+            enum CodingKeys: String, CodingKey {
+                case currentPrice = "current_price"
+                case ath
+                case athChangePercentage = "ath_change_percentage"
+                case marketCap = "market_cap"
+                case totalVolume = "total_volume"
+                case high24h
+                case low24h
+                case priceChange24h = "price_change_24h"
+                case priceChangePercentage24h = "price_change_percentage_24h"
+            }
+        }
+        
+        struct Links: Codable {
+            let homepage: [String]
+            let twitterScreenName: String?
+            let subredditUrl: String?
+            let reposUrl: ReposUrl
+            
+            enum CodingKeys: String, CodingKey {
+                case homepage
+                case twitterScreenName = "twitter_screen_name"
+                case subredditUrl = "subreddit_url"
+                case reposUrl = "repos_url"
+            }
+            
+            struct ReposUrl: Codable {
+                let github: [String]?
+            }
+        }
+    }
+    
+    // CoinGecko chart data response
+    struct CoinGeckoChartResponse: Codable {
+        let prices: [[Double]]
+    }
+    
+    // CoinCap history response
+    struct CoinCapHistoryResponse: Codable {
+        let data: [DataPoint]
+        
+        struct DataPoint: Codable {
+            let priceUsd: String
+            let time: Int64
+        }
+    }
 }
 
 // MARK: - Models
@@ -332,6 +839,7 @@ enum APIError: Error, Equatable {
     case invalidResponse
     case decodingError
     case allAPIsFailed
+    case coinNotFound
 }
 
 // Define the operator function to fix the "Referencing operator function '~='" error
