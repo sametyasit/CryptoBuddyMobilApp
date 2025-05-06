@@ -68,7 +68,7 @@ final class NewsServiceImpl {
     
     func fetchNews(category: NewsCategory = .all, page: Int = 1) async throws -> [NewsItem] {
         var urlComponents = URLComponents(string: "\(baseURL)")!
-        var queryItems = [
+        let queryItems = [
             URLQueryItem(name: "api_key", value: apiKey),
             URLQueryItem(name: "lang", value: "EN")
         ]
