@@ -89,6 +89,22 @@ struct CoinListView: View {
                                 .cornerRadius(10)
                         }
                         .padding(.top, 10)
+                        
+                        // API kaynakları hakkında bilgi
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("İpucu:")
+                                .font(.footnote)
+                                .fontWeight(.bold)
+                                .foregroundColor(.gray)
+                            
+                            Text("Uygulamamız CoinGecko, CoinMarketCap, CoinStats, CoinCap, CryptoCompare, CoinLayer ve CoinPaprika API'lerini kullanır, internet bağlantınızı kontrol edin veya daha sonra tekrar deneyin.")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .padding(.top, 20)
+                        .padding(.horizontal)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding()
                 } else {
@@ -250,9 +266,15 @@ final class CoinListViewModel: ObservableObject {
             allPagesLoaded = newCoins.count < coinsPerPage
             
         } catch APIError.allAPIsFailed {
-            errorMessage = "Hiçbir API kaynağından veri alınamadı. Lütfen internet bağlantınızı kontrol edin."
+            errorMessage = "Hiçbir API kaynağından veri alınamadı. Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin.\n\nİpucu: Uygulamamız CoinGecko, CoinMarketCap, CoinStats, CoinCap, CryptoCompare, CoinLayer ve CoinPaprika API'lerini kullanır, internet bağlantınızı kontrol edin veya daha sonra tekrar deneyin."
+        } catch APIError.rateLimitExceeded {
+            errorMessage = "API hız limiti aşıldı. Lütfen bir süre sonra tekrar deneyin.\n\nİpucu: Birkaç dakika bekleyip tekrar deneyin veya uygulama ayarlarından farklı bir API kaynağı seçmeyi deneyin."
+        } catch URLError.timedOut {
+            errorMessage = "Sunucuya bağlanırken zaman aşımı oluştu. İnternet bağlantınızı kontrol edin veya farklı bir ağa bağlanmayı deneyin."
+        } catch URLError.notConnectedToInternet {
+            errorMessage = "İnternet bağlantısı bulunamadı. Lütfen ağ ayarlarınızı kontrol edin ve Wi-Fi veya mobil verinin açık olduğundan emin olun."
         } catch {
-            errorMessage = "Veri yüklenirken bir hata oluştu: \(error.localizedDescription)"
+            errorMessage = "Veri yüklenirken bir hata oluştu: \(error.localizedDescription)\n\nLütfen daha sonra tekrar deneyin."
         }
         isLoading = false
     }
