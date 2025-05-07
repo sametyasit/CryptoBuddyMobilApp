@@ -364,7 +364,10 @@ class MultiCoinViewModel: ObservableObject {
             if isRefresh {
                 allCoins = response.coins
             } else {
-                allCoins.append(contentsOf: response.coins)
+                let uniqueNewCoins = response.coins.filter { newCoin in
+                    !allCoins.contains(where: { $0.id == newCoin.id })
+                }
+                allCoins.append(contentsOf: uniqueNewCoins)
             }
             
             // Set flags
