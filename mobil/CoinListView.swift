@@ -289,11 +289,14 @@ final class CoinListViewModel: ObservableObject {
         do {
             let fetchResult = try await APIService.shared.fetchCoins(page: currentPage, perPage: coinsPerPage)
             let newCoins = fetchResult.coins
-            
-            coins.append(contentsOf: newCoins)
+            // YENİ: Sadece daha önce eklenmemiş coinleri ekle
+            let uniqueNewCoins = newCoins.filter { newCoin in
+                !coins.contains(where: { $0.id == newCoin.id })
+            }
+            coins.append(contentsOf: uniqueNewCoins)
             
             // Tüm sayfalar yüklendi mi kontrol et
-            allPagesLoaded = newCoins.count < coinsPerPage
+            allPagesLoaded = uniqueNewCoins.count < coinsPerPage
             
         } catch {
             // Hata durumunda sayfa sayısını geri al
