@@ -6,6 +6,10 @@ import SwiftUI
 class APIService {
     static let shared = APIService()
     
+    // Global bir set oluşturalım - tüm yüklenen coinlerin ID'lerini tutacak
+    private var alreadyLoadedCoinIds = Set<String>()
+    private let coinIdsLock = NSLock() // Thread güvenliği için kilit ekle
+    
     private let coinGeckoURL = "https://api.coingecko.com/api/v3"
     private let binanceURL = "https://api.binance.com/api/v3"
     private let coinCapURL = "https://api.coincap.io/v2"
@@ -90,26 +94,83 @@ class APIService {
     private var coinCache: [String: (timestamp: Date, response: APIResponse)] = [:]
     private let cacheValidDuration: TimeInterval = 60 // 30 saniyeden 60 saniyeye çıkarıldı
     
+    // Yüklenen coinlerin ID'lerini temizlemek için metod
+    func clearLoadedCoinIds() {
+        print("🧹 Yüklenen coin ID'leri temizleniyor...")
+        coinIdsLock.lock()
+        alreadyLoadedCoinIds.removeAll()
+        coinIdsLock.unlock()
+        print("✅ Yüklenen coin ID'leri temizlendi")
+    }
+    
+    // Önbellek temizleme metodu
+    func clearCoinsCache() {
+        print("🧹 Coin önbelleği temizleniyor...")
+        coinCache.removeAll()
+        
+        // ID'leri de temizle
+        clearLoadedCoinIds()
+        
+        // Şu anki API'nin sayfa yüklerinde bazı sorunlar olabilir, bu yüzden önbelleği tamamen temizliyoruz
+        // Bu, uygulamanın farklı API'lere geçmesini sağlar ve daha fazla benzersiz coin alabilir
+        Task {
+            do {
+                // API'lerin rate limitlerini aşmamak için kısa bir bekleme
+                try await Task.sleep(nanoseconds: 500_000_000) // 0.5 saniye
+                print("✅ Önbellekler temizlendi, API'ler yeniden kullanılabilir")
+            } catch {
+                print("⚠️ Bekleme sırasında hata: \(error)")
+            }
+        }
+        
+        print("✅ Coin önbelleği temizlendi")
+    }
+    
     @Sendable
     func fetchCoins(page: Int, perPage: Int) async throws -> APIResponse {
         print("🔍 Fetching coins page \(page) with \(perPage) per page")
+        
+        // İlk sayfa için set'i temizle
+        if page == 1 {
+            clearLoadedCoinIds()
+        }
         
         // Önbellekten kontrol et
         let cacheKey = "coins_\(page)_\(perPage)"
         if let cached = coinCache[cacheKey], 
            Date().timeIntervalSince(cached.timestamp) < cacheValidDuration {
-            print("✅ Önbellekten veri kullanılıyor (sayfa \(page))")
+            print("✅ Önbellekten veri kullanılıyor (sayfa \(page)) - \(cached.response.coins.count) coin")
+            
+            // Önbellekli verilerde bile, yüklenen coin ID'lerini güncelle
+            for coin in cached.response.coins {
+                coinIdsLock.lock()
+                alreadyLoadedCoinIds.insert(coin.id)
+                coinIdsLock.unlock()
+            }
+            
             return cached.response
         }
         
+        print("🔄 Önbellekte veri yok veya süresi dolmuş. API'den veri çekiliyor...")
         var errors: [Error] = []
         
         // 1. Try CoinGecko API
         do {
-            print("🔍 CoinGecko API deneniyor...")
-            let coins = try await fetchCoinsFromCoinGecko(page: page, perPage: perPage)
-            print("✅ CoinGecko başarılı: \(coins.count) coin")
-            let response = APIResponse(coins: coins, source: "CoinGecko")
+            print("🔍 CoinGecko API deneniyor (sayfa \(page), sayfa başına \(perPage))...")
+            let allCoins = try await fetchCoinsFromCoinGecko(page: page, perPage: perPage)
+            
+            // Sadece daha önce yüklenmemiş coinleri filtrele
+            coinIdsLock.lock()
+            let uniqueCoins = allCoins.filter { !alreadyLoadedCoinIds.contains($0.id) }
+            
+            // Yeni coinlerin ID'lerini ekle
+            for coin in uniqueCoins {
+                alreadyLoadedCoinIds.insert(coin.id)
+            }
+            coinIdsLock.unlock()
+            
+            print("✅ CoinGecko başarılı: \(allCoins.count) coin bulundu, \(uniqueCoins.count) benzersiz coin eklendi, sayfa \(page)")
+            let response = APIResponse(coins: uniqueCoins, source: "CoinGecko")
             
             // Önbelleğe kaydet
             coinCache[cacheKey] = (Date(), response)
@@ -120,11 +181,22 @@ class APIService {
             
             // 2. Try CoinMarketCap API
             do {
-                print("🔍 CoinMarketCap API deneniyor...")
+                print("🔍 CoinMarketCap API deneniyor (sayfa \(page), sayfa başına \(perPage))...")
                 let start = (page - 1) * perPage + 1
-                let coins = try await fetchCoinsFromCoinMarketCap(limit: perPage, start: start)
-                print("✅ CoinMarketCap başarılı: \(coins.count) coin")
-                let response = APIResponse(coins: coins, source: "CoinMarketCap")
+                let allCoins = try await fetchCoinsFromCoinMarketCap(limit: perPage, start: start)
+                
+                // Sadece daha önce yüklenmemiş coinleri filtrele
+                coinIdsLock.lock()
+                let uniqueCoins = allCoins.filter { !alreadyLoadedCoinIds.contains($0.id) }
+                
+                // Yeni coinlerin ID'lerini ekle
+                for coin in uniqueCoins {
+                    alreadyLoadedCoinIds.insert(coin.id)
+                }
+                coinIdsLock.unlock()
+                
+                print("✅ CoinMarketCap başarılı: \(allCoins.count) coin bulundu, \(uniqueCoins.count) benzersiz coin eklendi, sayfa \(page)")
+                let response = APIResponse(coins: uniqueCoins, source: "CoinMarketCap")
                 
                 // Önbelleğe kaydet
                 coinCache[cacheKey] = (Date(), response)
@@ -135,10 +207,20 @@ class APIService {
                 
                 // 3. Try CoinStats API
                 do {
-                    print("🔍 CoinStats API deneniyor...")
-                    let coins = try await fetchCoinsFromCoinStats(limit: perPage, skip: (page - 1) * perPage)
-                    print("✅ CoinStats başarılı: \(coins.count) coin")
-                    let response = APIResponse(coins: coins, source: "CoinStats")
+                    print("🔍 CoinStats API deneniyor (sayfa \(page), sayfa başına \(perPage))...")
+                    let skip = (page - 1) * perPage
+                    let allCoins = try await fetchCoinsFromCoinStats(limit: perPage, skip: skip)
+                    
+                    // Sadece daha önce yüklenmemiş coinleri filtrele
+                    let uniqueCoins = allCoins.filter { !alreadyLoadedCoinIds.contains($0.id) }
+                    
+                    // Yeni coinlerin ID'lerini ekle
+                    for coin in uniqueCoins {
+                        alreadyLoadedCoinIds.insert(coin.id)
+                    }
+                    
+                    print("✅ CoinStats başarılı: \(allCoins.count) coin bulundu, \(uniqueCoins.count) benzersiz coin eklendi, sayfa \(page)")
+                    let response = APIResponse(coins: uniqueCoins, source: "CoinStats")
                     
                     // Önbelleğe kaydet
                     coinCache[cacheKey] = (Date(), response)
@@ -149,10 +231,22 @@ class APIService {
                     
                     // 4. Try CoinCap API
                     do {
-                        print("🔍 CoinCap API deneniyor...")
-                        let coins = try await fetchCoinsFromCoinCap(limit: perPage, offset: (page - 1) * perPage)
-                        print("✅ CoinCap başarılı: \(coins.count) coin")
-                        let response = APIResponse(coins: coins, source: "CoinCap")
+                        print("🔍 CoinCap API deneniyor (sayfa \(page), sayfa başına \(perPage))...")
+                        let offset = (page - 1) * perPage
+                        let allCoins = try await fetchCoinsFromCoinCap(limit: perPage, offset: offset)
+                        
+                        // Sadece daha önce yüklenmemiş coinleri filtrele
+                        coinIdsLock.lock()
+                        let uniqueCoins = allCoins.filter { !alreadyLoadedCoinIds.contains($0.id) }
+                        
+                        // Yeni coinlerin ID'lerini ekle
+                        for coin in uniqueCoins {
+                            alreadyLoadedCoinIds.insert(coin.id)
+                        }
+                        coinIdsLock.unlock()
+                        
+                        print("✅ CoinCap başarılı: \(allCoins.count) coin bulundu, \(uniqueCoins.count) benzersiz coin eklendi, sayfa \(page)")
+                        let response = APIResponse(coins: uniqueCoins, source: "CoinCap")
                         
                         // Önbelleğe kaydet
                         coinCache[cacheKey] = (Date(), response)
@@ -163,10 +257,21 @@ class APIService {
                         
                         // 5. Try CryptoCompare API (Yeni eklenen)
                         do {
-                            print("🔍 CryptoCompare API deneniyor...")
-                            let coins = try await fetchCoinsFromCryptoCompare(limit: perPage)
-                            print("✅ CryptoCompare başarılı: \(coins.count) coin")
-                            let response = APIResponse(coins: coins, source: "CryptoCompare")
+                            print("🔍 CryptoCompare API deneniyor (sayfa \(page), sayfa başına \(perPage))...")
+                            let allCoins = try await fetchCoinsFromCryptoCompare(limit: perPage)
+                            
+                            // Sadece daha önce yüklenmemiş coinleri filtrele
+                            coinIdsLock.lock()
+                            let uniqueCoins = allCoins.filter { !alreadyLoadedCoinIds.contains($0.id) }
+                            
+                            // Yeni coinlerin ID'lerini ekle
+                            for coin in uniqueCoins {
+                                alreadyLoadedCoinIds.insert(coin.id)
+                            }
+                            coinIdsLock.unlock()
+                            
+                            print("✅ CryptoCompare başarılı: \(allCoins.count) coin bulundu, \(uniqueCoins.count) benzersiz coin eklendi, sayfa \(page)")
+                            let response = APIResponse(coins: uniqueCoins, source: "CryptoCompare")
                             
                             // Önbelleğe kaydet
                             coinCache[cacheKey] = (Date(), response)
@@ -177,10 +282,21 @@ class APIService {
                             
                             // 6. Try CoinLayer API (Yeni eklenen)
                             do {
-                                print("🔍 CoinLayer API deneniyor...")
-                                let coins = try await fetchCoinsFromCoinLayer()
-                                print("✅ CoinLayer başarılı: \(coins.count) coin")
-                                let response = APIResponse(coins: coins, source: "CoinLayer")
+                                print("🔍 CoinLayer API deneniyor (sayfa \(page), sayfa başına \(perPage))...")
+                                let allCoins = try await fetchCoinsFromCoinLayer()
+                                
+                                // Sadece daha önce yüklenmemiş coinleri filtrele
+                                coinIdsLock.lock()
+                                let uniqueCoins = allCoins.filter { !alreadyLoadedCoinIds.contains($0.id) }
+                                
+                                // Yeni coinlerin ID'lerini ekle
+                                for coin in uniqueCoins {
+                                    alreadyLoadedCoinIds.insert(coin.id)
+                                }
+                                coinIdsLock.unlock()
+                                
+                                print("✅ CoinLayer başarılı: \(allCoins.count) coin bulundu, \(uniqueCoins.count) benzersiz coin eklendi, sayfa \(page)")
+                                let response = APIResponse(coins: uniqueCoins, source: "CoinLayer")
                                 
                                 // Önbelleğe kaydet
                                 coinCache[cacheKey] = (Date(), response)
@@ -191,10 +307,21 @@ class APIService {
                                 
                                 // 7. Try CoinPaprika API (Yeni eklenen)
                                 do {
-                                    print("🔍 CoinPaprika API deneniyor...")
-                                    let coins = try await fetchCoinsFromCoinPaprika(limit: perPage)
-                                    print("✅ CoinPaprika başarılı: \(coins.count) coin")
-                                    let response = APIResponse(coins: coins, source: "CoinPaprika")
+                                    print("🔍 CoinPaprika API deneniyor (sayfa \(page), sayfa başına \(perPage))...")
+                                    let allCoins = try await fetchCoinsFromCoinPaprika(limit: perPage)
+                                    
+                                    // Sadece daha önce yüklenmemiş coinleri filtrele
+                                    coinIdsLock.lock()
+                                    let uniqueCoins = allCoins.filter { !alreadyLoadedCoinIds.contains($0.id) }
+                                    
+                                    // Yeni coinlerin ID'lerini ekle
+                                    for coin in uniqueCoins {
+                                        alreadyLoadedCoinIds.insert(coin.id)
+                                    }
+                                    coinIdsLock.unlock()
+                                    
+                                    print("✅ CoinPaprika başarılı: \(allCoins.count) coin bulundu, \(uniqueCoins.count) benzersiz coin eklendi, sayfa \(page)")
+                                    let response = APIResponse(coins: uniqueCoins, source: "CoinPaprika")
                                     
                                     // Önbelleğe kaydet
                                     coinCache[cacheKey] = (Date(), response)
@@ -217,9 +344,6 @@ class APIService {
     }
     
     private func fetchCoinsFromCoinGecko(page: Int, perPage: Int) async throws -> [Coin] {
-        // API yanıtını daha detaylı inceleyelim
-        print("🔄 CoinGecko API isteği başlatılıyor - Sayfa: \(page), Adet: \(perPage)")
-        
         // CoinGecko için ücretsiz API endpoint'i 
         // Not: Ücretsiz plan rate limitleri var, Pro için farklı endpoint kullanılır
         let urlString = "\(coinGeckoURL)/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=\(perPage)&page=\(page)&sparkline=false&price_change_percentage=24h"
@@ -238,7 +362,7 @@ class APIService {
         }
         
         var request = URLRequest(url: url)
-        request.timeoutInterval = 15 // 10 saniyeden 15 saniyeye çıkardık
+        request.timeoutInterval = 30 // Daha uzun zaman aşımı (15 -> 30 saniye)
         
         // API anahtarı ekleme - ücretsiz plan API anahtarı kullanmıyor ama Pro için gerekli
         if !coinGeckoKey.isEmpty {
@@ -249,7 +373,7 @@ class APIService {
         request.addValue("CryptoBuddy/1.0", forHTTPHeaderField: "User-Agent")
         
         // Debugging
-        print("🔍 CoinGecko isteği: \(urlString)")
+        print("🔍 CoinGecko sayfa \(page) için \(perPage) coin çekme isteği: \(urlString)")
         
         // Retry logic - Max 2 retries
         var attempts = 0
@@ -314,9 +438,9 @@ class APIService {
                     attempts += 1
                     if attempts <= maxAttempts {
                         // Her yeni denemede bekleme süresini arttır
-                        let waitTime = Double(attempts) * 2.0 // Artan bekleme süresi
+                        let waitTime = Double(attempts) * 3.0 // Artan bekleme süresi (2 -> 3 saniye)
                         print("⏱️ \(waitTime) saniye bekleniyor...")
-                        try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000)) // 2, 4 saniye...
+                        try await Task.sleep(nanoseconds: UInt64(waitTime * 1_000_000_000)) // 3, 6 saniye...
                         continue
                     }
                     throw APIError.rateLimitExceeded
