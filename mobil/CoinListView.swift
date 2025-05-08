@@ -132,12 +132,12 @@ struct CoinListView: View {
                     // Coin Listesi
                     ScrollView {
                         LazyVStack(spacing: 15) {
-                            ForEach(viewModel.coins) { coin in
+                            ForEach(Array(viewModel.coins.enumerated()), id: \.element.id) { index, coin in
                                 Button(action: {
                                     self.selectedCoinId = coin.id
                                     self.showCoinDetail = true
                                 }) {
-                                    CoinRowView(coin: coin)
+                                    CoinRowView(coin: coin, displayRank: index + 1)
                                         .padding(.horizontal)
                                 }
                                 .buttonStyle(PlainButtonStyle())
@@ -160,6 +160,11 @@ struct CoinListView: View {
                                 }
                                 .padding(.horizontal)
                                 .padding(.vertical, 5)
+                            } else if viewModel.allPagesLoaded && !viewModel.isLoadingMore {
+                                Text("Tüm coinler yüklendi")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.gray)
+                                    .padding(.vertical, 10)
                             }
                             
                             if viewModel.isLoadingMore {
@@ -281,27 +286,69 @@ final class CoinListViewModel: ObservableObject {
     
     @MainActor
     func loadMoreCoins() async {
-        guard !isLoadingMore, !allPagesLoaded else { return }
+        guard !isLoadingMore else { return }
         
+        // Eğer toplam coin sayısı 200'ü geçtiyse daha fazla yükleme
+        if coins.count >= 200 {
+            allPagesLoaded = true
+            print("📱 Maksimum coin sayısına ulaşıldı (200+)")
+            return
+        }
+        
+        // Yüklemede değilse ve maksimum sayıya ulaşılmadıysa devam et
         isLoadingMore = true
         currentPage += 1
         
+        print("📱 Sayfa \(currentPage) için yeni coinler yükleniyor...")
+        
         do {
-            let fetchResult = try await APIService.shared.fetchCoins(page: currentPage, perPage: coinsPerPage)
+            // Her sayfada 20 coin yükleyelim
+            let perPage = 20
+            let fetchResult = try await APIService.shared.fetchCoins(page: currentPage, perPage: perPage)
             let newCoins = fetchResult.coins
-            // YENİ: Sadece daha önce eklenmemiş coinleri ekle
-            let uniqueNewCoins = newCoins.filter { newCoin in
-                !coins.contains(where: { $0.id == newCoin.id })
+            
+            print("📱 API'den \(newCoins.count) yeni coin alındı")
+            
+            if newCoins.isEmpty {
+                // Hiç coin gelmezse tüm sayfalar yüklenmiş demektir
+                allPagesLoaded = true
+                print("📱 Tüm coinler yüklenmiş, başka coin yok")
+            } else {
+                // Mevcut coinlerin ID'lerini tutacak bir set oluştur
+                let existingIds = Set(coins.map { $0.id })
+                
+                // Yalnızca yeni ve benzersiz coinleri filtrele
+                let uniqueNewCoins = newCoins.filter { !existingIds.contains($0.id) }
+                
+                print("📱 Benzersiz coin sayısı: \(uniqueNewCoins.count)")
+                
+                if uniqueNewCoins.isEmpty {
+                    // API farklı coinleri döndüremiyorsa, başka bir API servisine geçmeyi dene
+                    print("📱 Bu API'den benzersiz coin kalmamış, farklı API denenecek")
+                    // Bu sayfayı atlayıp bir sonraki sayfaya geç
+                    currentPage += 1
+                    await loadMoreCoins() // Rekursif çağrı
+                    return
+                } else {
+                    // Yeni coinleri ekle
+                    coins.append(contentsOf: uniqueNewCoins)
+                    print("📱 Şu anki toplam coin sayısı: \(coins.count)")
+                    
+                    // Toplam coin sayısı kontrol et
+                    if coins.count >= 200 {
+                        allPagesLoaded = true
+                        print("📱 Maksimum coin sayısına ulaşıldı (200+)")
+                    } else {
+                        // Eğer beklenenden az coin geldiyse, ama hala 200'den az coinimiz varsa devam et
+                        allPagesLoaded = uniqueNewCoins.count < perPage && coins.count >= 200
+                    }
+                }
             }
-            coins.append(contentsOf: uniqueNewCoins)
-            
-            // Tüm sayfalar yüklendi mi kontrol et
-            allPagesLoaded = uniqueNewCoins.count < coinsPerPage
-            
         } catch {
             // Hata durumunda sayfa sayısını geri al
             currentPage -= 1
-            errorMessage = "Daha fazla coin yüklenirken hata oluştu."
+            errorMessage = "Daha fazla coin yüklenirken hata oluştu: \(error.localizedDescription)"
+            print("❌ Hata: \(error.localizedDescription)")
         }
         
         isLoadingMore = false
@@ -309,9 +356,23 @@ final class CoinListViewModel: ObservableObject {
     
     @MainActor
     func refresh() async {
+        // Sayfalama bilgilerini sıfırla
         currentPage = 1
         errorMessage = nil
         allPagesLoaded = false
+        
+        // Mevcut coin listesini temizle
+        coins = []
+        
+        // API önbelleğini temizle
+        APIService.shared.clearCoinsCache()
+        
+        // Yüklenen coin ID'lerini temizle
+        APIService.shared.clearLoadedCoinIds()
+        
+        print("🔄 Coinler yenileniyor ve önbellek temizleniyor...")
+        
+        // Yeni coinleri yükle
         await fetchCoins()
     }
 }
@@ -319,11 +380,18 @@ final class CoinListViewModel: ObservableObject {
 // Coin satırı görünümü
 struct CoinRowView: View {
     let coin: Coin
+    let displayRank: Int
+    
+    // Varsayılan değer ekleyelim
+    init(coin: Coin, displayRank: Int? = nil) {
+        self.coin = coin
+        self.displayRank = displayRank ?? coin.rank
+    }
     
     var body: some View {
         HStack(spacing: 5) {
             // Sıralama
-            Text("\(coin.rank)")
+            Text("\(displayRank)")
                 .font(.system(size: 14))
                 .foregroundColor(.gray)
                 .frame(width: 30, alignment: .center)
