@@ -59,19 +59,19 @@ struct MultiCoinListView: View {
                 if viewModel.isLoaded {
                     ScrollView {
                         LazyVStack(spacing: 0) {
-                            ForEach(viewModel.allCoins) { coin in
+                            ForEach(Array(viewModel.allCoins.enumerated()), id: \.element.id) { index, coin in
                                 Button(action: {
                                     selectedCoinId = coin.id
                                     showCoinDetail = true
                                 }) {
-                                    CoinRow(coin: coin)
+                                    CoinRow(coin: coin, displayRank: index + 1)
                                         .padding(.horizontal)
                                         .padding(.vertical, 6)
                                 }
                                 .buttonStyle(PlainButtonStyle())
                             }
                             
-                            if !viewModel.isLoadingMore && !viewModel.isRefreshing {
+                            if !viewModel.isLoadingMore && !viewModel.isRefreshing && viewModel.hasMorePages {
                                 Button(action: {
                                     viewModel.loadMoreCoins()
                                 }) {
@@ -88,6 +88,11 @@ struct MultiCoinListView: View {
                                     .cornerRadius(12)
                                     .padding()
                                 }
+                            } else if !viewModel.isLoadingMore && !viewModel.isRefreshing && !viewModel.hasMorePages {
+                                Text("You've reached the end")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.gray)
+                                    .padding()
                             }
                             
                             if viewModel.isLoadingMore {
@@ -159,12 +164,18 @@ struct MultiCoinListView: View {
 
 struct CoinRow: View {
     let coin: Coin
+    let displayRank: Int
+    
+    init(coin: Coin, displayRank: Int? = nil) {
+        self.coin = coin
+        self.displayRank = displayRank ?? coin.rank
+    }
     
     var body: some View {
         HStack {
             // Rank & Image
             HStack(spacing: 12) {
-                Text("\(coin.rank)")
+                Text("\(displayRank)")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.gray)
                     .frame(width: 30, alignment: .center)
@@ -313,11 +324,11 @@ class MultiCoinViewModel: ObservableObject {
     @Published var isLoaded = false
     @Published var error: String? = nil
     @Published var activeAPIs: [String] = []
+    @Published var hasMorePages = true
     
     private let apiService = APIService.shared
     private var currentPage = 1
-    private var hasMorePages = true
-    private let coinsPerPage = 30
+    private let coinsPerPage = 20 // Sayfa başına 20 coin
     
     // Initialize and load coins
     init() {
@@ -334,6 +345,18 @@ class MultiCoinViewModel: ObservableObject {
         currentPage = 1
         error = nil
         
+        // Mevcut coinleri temizle ve tüm sayfalama bilgilerini sıfırla 
+        allCoins = []
+        hasMorePages = true
+        
+        // API önbelleğini temizle
+        APIService.shared.clearCoinsCache()
+        
+        // Yüklenen coin ID'lerini temizle
+        APIService.shared.clearLoadedCoinIds()
+        
+        print("🔄 Coinler yenileniyor ve önbellek temizleniyor...")
+        
         Task {
             await fetchCoinData(isRefresh: true)
         }
@@ -341,7 +364,14 @@ class MultiCoinViewModel: ObservableObject {
     
     // Load more coins (next page)
     func loadMoreCoins() {
-        guard !isLoadingMore && !isRefreshing && hasMorePages else { return }
+        guard !isLoadingMore && !isRefreshing else { return }
+        
+        // Maksimum coin sınırını kontrol et
+        if allCoins.count >= 200 {
+            hasMorePages = false
+            print("📊 Maksimum coin sayısına ulaşıldı (200+), daha fazla yüklenemiyor")
+            return
+        }
         
         isLoadingMore = true
         currentPage += 1
@@ -355,23 +385,67 @@ class MultiCoinViewModel: ObservableObject {
     @MainActor
     private func fetchCoinData(isRefresh: Bool) async {
         do {
+            print("📊 \(isRefresh ? "Yenileniyor" : "Daha fazla yükleniyor") - Sayfa \(currentPage)")
+            
+            // Eğer maksimum coin sayısına ulaştıysak ve yenileme değilse, işlemi durdur
+            if !isRefresh && allCoins.count >= 200 {
+                hasMorePages = false
+                isLoadingMore = false
+                print("📊 Maksimum coin sayısına ulaşıldı (200+)")
+                return
+            }
+            
+            // Her seferinde 20 coin yükle
             let response = try await apiService.fetchCoins(page: currentPage, perPage: coinsPerPage)
             
             // Update active API source
             activeAPIs = [response.source]
             
+            print("📊 API'den \(response.coins.count) coin alındı")
+            
             // Update coins
             if isRefresh {
+                // İlk yükleme veya yenileme - tüm listeyi sıfırlayıp yeni coinleri yükle
                 allCoins = response.coins
+                hasMorePages = response.coins.count >= coinsPerPage
+                print("📊 Liste yenilendi: \(allCoins.count) coin")
             } else {
-                let uniqueNewCoins = response.coins.filter { newCoin in
-                    !allCoins.contains(where: { $0.id == newCoin.id })
+                // Gelen verileri incele
+                if response.coins.isEmpty {
+                    // Hiç coin yoksa, daha fazla yok demektir
+                    hasMorePages = false
+                    print("📊 Daha fazla coin yok")
+                } else {
+                    // Yeni sayfa yükleme - sadece benzersiz coinleri ekle
+                    let existingIds = Set(allCoins.map { $0.id })
+                    let uniqueNewCoins = response.coins.filter { !existingIds.contains($0.id) }
+                    
+                    print("📊 Benzersiz coin sayısı: \(uniqueNewCoins.count)")
+                    
+                    if uniqueNewCoins.isEmpty {
+                        // API farklı coinleri döndüremiyorsa, başka bir API servisine geçmeyi dene
+                        print("📊 Bu API'den benzersiz coin kalmamış, farklı API denenecek")
+                        // Bu sayfayı atlayıp bir sonraki sayfaya geç
+                        currentPage += 1
+                        await fetchCoinData(isRefresh: false) // Rekursif çağrı
+                        return
+                    } else {
+                        // Yeni coinleri ekle
+                        allCoins.append(contentsOf: uniqueNewCoins)
+                        print("📊 Şu anki toplam coin sayısı: \(allCoins.count)")
+                        
+                        // Toplam coin sayısı kontrol et
+                        if allCoins.count >= 200 {
+                            hasMorePages = false
+                            print("📊 Maksimum coin sayısına ulaşıldı (200+)")
+                        } else {
+                            // Eğer beklenenden az coin geldiyse, ama hala 200'den az coinimiz varsa devam et
+                            hasMorePages = uniqueNewCoins.count >= coinsPerPage || allCoins.count < 200
+                        }
+                    }
                 }
-                allCoins.append(contentsOf: uniqueNewCoins)
             }
             
-            // Set flags
-            hasMorePages = response.coins.count >= coinsPerPage
             isLoaded = true
             error = nil
             
