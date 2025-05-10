@@ -5,128 +5,6 @@ import Charts
 import UIKit
 import SafariServices
 
-// Image önbellek sınıfı
-class ImageCache {
-    static let shared = ImageCache()
-    private var cache = NSCache<NSString, UIImage>()
-    
-    private init() {
-        cache.countLimit = 100
-        cache.totalCostLimit = 1024 * 1024 * 50 // 50 MB
-    }
-    
-    func set(_ image: UIImage, forKey key: String) {
-        cache.setObject(image, forKey: key as NSString)
-    }
-    
-    func get(forKey key: String) -> UIImage? {
-        return cache.object(forKey: key as NSString)
-    }
-    
-    func remove(forKey key: String) {
-        cache.removeObject(forKey: key as NSString)
-    }
-    
-    func removeAll() {
-        cache.removeAllObjects()
-    }
-}
-
-// Önbellekli görüntü yükleme görünümü
-struct CachedAsyncImage<Content: View>: View {
-    private let url: URL?
-    private let scale: CGFloat
-    private let transaction: Transaction
-    private let content: (AsyncImagePhase) -> Content
-    @State private var loadedImage: UIImage? = nil
-    @State private var isLoading = false
-    @State private var loadTask: Task<Void, Never>? = nil
-    
-    init(url: URL?, scale: CGFloat = 1.0, transaction: Transaction = Transaction(), @ViewBuilder content: @escaping (AsyncImagePhase) -> Content) {
-        self.url = url
-        self.scale = scale
-        self.transaction = transaction
-        self.content = content
-    }
-    
-    var body: some View {
-        Group {
-            if let cachedImage = getCachedImage() {
-                content(.success(Image(uiImage: cachedImage)))
-            } else if let image = loadedImage {
-                content(.success(Image(uiImage: image)))
-            } else {
-                content(.empty)
-                    .onAppear {
-                        if !isLoading {
-                            startLoading()
-                        }
-                    }
-                    .onDisappear {
-                        cancelLoading()
-                    }
-            }
-        }
-    }
-    
-    private func startLoading() {
-        guard let url = url, loadTask == nil else { return }
-        isLoading = true
-        
-        loadTask = Task {
-            do {
-                // Düşük öncelikli yükleme
-                try await Task.sleep(nanoseconds: 50_000_000) // 50ms gecikme
-                
-                let (data, _) = try await URLSession.shared.data(from: url)
-                if let image = UIImage(data: data) {
-                    ImageCache.shared.set(image, forKey: url.absoluteString)
-                    await MainActor.run {
-                        loadedImage = image
-                        isLoading = false
-                        loadTask = nil
-                    }
-                }
-            } catch {
-                print("Failed to load image: \(error)")
-                await MainActor.run {
-                    isLoading = false
-                    loadTask = nil
-                }
-            }
-        }
-    }
-    
-    private func cancelLoading() {
-        loadTask?.cancel()
-        loadTask = nil
-        isLoading = false
-    }
-    
-    private func getCachedImage() -> UIImage? {
-        guard let url = url else { return nil }
-        return ImageCache.shared.get(forKey: url.absoluteString)
-    }
-}
-
-// UIImage dönüşümü için uzantı
-extension Image {
-    func asUIImage() -> UIImage? {
-        let controller = UIHostingController(rootView: self)
-        if let view = controller.view {
-            let size = view.intrinsicContentSize
-            view.bounds = CGRect(origin: .zero, size: size)
-            view.backgroundColor = .clear
-            
-            let renderer = UIGraphicsImageRenderer(size: size)
-            return renderer.image { _ in
-                view.drawHierarchy(in: view.bounds, afterScreenUpdates: true)
-            }
-        }
-        return nil
-    }
-}
-
 // MARK: - Custom SafariView
 struct CustomSafariView: UIViewControllerRepresentable {
     let url: URL
@@ -142,11 +20,14 @@ struct CustomSafariView: UIViewControllerRepresentable {
 class SearchViewModelLight: ObservableObject, @unchecked Sendable {
     @Published var searchText = ""
     @Published var isLoading = false
+    @Published var isSearching = false
     @Published var coins: [Coin] = []
     @Published var news: [NewsItem] = []
     @Published var filteredCoins: [Coin] = []
     @Published var filteredNews: [NewsItem] = []
     @Published var selectedCoin: Coin? = nil
+    @Published var errorMessage: String? = nil
+    @Published var isLoadingMoreCoins = false
     
     // Coin listesi
     @Published var coinNames: [String] = [
@@ -180,6 +61,7 @@ class SearchViewModelLight: ObservableObject, @unchecked Sendable {
     private var lastCoinFetchTime: Date? = nil
     private var lastNewsFetchTime: Date? = nil
     private let refreshInterval: TimeInterval = 60 // 60 saniye
+    private var currentPage = 1
     
     init() {
         // App açılışında UserDefaults'tan kayıtlı verileri yükleme
@@ -190,7 +72,7 @@ class SearchViewModelLight: ObservableObject, @unchecked Sendable {
         if shouldRefreshCoins() || coins.isEmpty {
             isLoading = true
             Task {
-                await fetchCoins()
+                await fetchCoins(page: 1)
                 await fetchNews()
                 
                 DispatchQueue.main.async {
@@ -266,19 +148,81 @@ class SearchViewModelLight: ObservableObject, @unchecked Sendable {
     
     @MainActor
     @Sendable
-    func fetchCoins() async {
+    func fetchCoins(page: Int) async {
         do {
-            let response = try await APIService.shared.fetchCoins(page: 1, perPage: 100)
-            self.coins = response.coins
+            isLoading = true
+            let response = try await APIService.shared.fetchCoins(page: page, perPage: 200)
+            
+            if page == 1 {
+                // İlk sayfa ise, mevcut listeyi temizle
+                self.coins = response.coins
+            } else {
+                // Sonraki sayfalar ise, mevcut listeye ekle
+                // Zaten eklenen coinleri önle (ID'ye göre)
+                let existingIds = Set(self.coins.map { $0.id })
+                let newCoins = response.coins.filter { !existingIds.contains($0.id) }
+                self.coins.append(contentsOf: newCoins)
+            }
+            
             updateCoinNamesAndLogos()
             self.lastCoinFetchTime = Date()
+            
+            // Arama terimi varsa, sonuçları güncelle
+            if !searchText.isEmpty {
+                self.searchCoins(searchText)
+            }
             
             // Önbelleğe kaydet
             Task {
                 cacheData()
             }
+            
+            // Sayfa numarasını güncelle
+            self.currentPage = page
+            self.isLoading = false
         } catch {
             print("Coin verileri yüklenemedi: \(error)")
+            self.isLoading = false
+            self.errorMessage = "Coin verileri yüklenirken bir hata oluştu: \(error.localizedDescription)"
+        }
+    }
+    
+    // Daha fazla coin yükle
+    @MainActor
+    func loadMoreCoins() async {
+        guard !isLoadingMoreCoins else { return }
+        
+        isLoadingMoreCoins = true
+        let nextPage = currentPage + 1
+        
+        do {
+            let response = try await APIService.shared.fetchCoins(page: nextPage, perPage: 200)
+            
+            // Zaten eklenen coinleri önle (ID'ye göre)
+            let existingIds = Set(self.coins.map { $0.id })
+            let newCoins = response.coins.filter { !existingIds.contains($0.id) }
+            
+            if !newCoins.isEmpty {
+                self.coins.append(contentsOf: newCoins)
+                
+                // Arama terimi varsa, sonuçları güncelle
+                if !searchText.isEmpty {
+                    self.searchCoins(searchText)
+                }
+                
+                // Sayfa numarasını güncelle
+                self.currentPage = nextPage
+                
+                // Önbelleğe kaydet
+                Task {
+                    cacheData()
+                }
+            }
+            
+            isLoadingMoreCoins = false
+        } catch {
+            print("Daha fazla coin yüklenirken hata: \(error)")
+            isLoadingMoreCoins = false
         }
     }
     
@@ -287,7 +231,8 @@ class SearchViewModelLight: ObservableObject, @unchecked Sendable {
     func fetchNews() async {
         do {
             let fetchedNews = try await APIService.shared.fetchNews()
-            self.news = fetchedNews
+            // Convert API model to app model
+            self.news = fetchedNews.map { NewsItem.fromAPIModel($0) }
             self.lastNewsFetchTime = Date()
             
             // Önbelleğe kaydet
@@ -299,25 +244,43 @@ class SearchViewModelLight: ObservableObject, @unchecked Sendable {
         }
     }
     
+    // Arama işlevini geliştir
     func searchCoins(_ query: String) {
+        searchText = query
+        
         if query.isEmpty {
             filteredCoins = []
             filteredNews = []
-        } else {
-            // Arama sorgusunu optimize et
-            let lowercasedQuery = query.lowercased()
-            
-            // Coin araması
-            filteredCoins = coins.filter { 
-                $0.name.lowercased().contains(lowercasedQuery) || 
-                $0.symbol.lowercased().contains(lowercasedQuery)
-            }
-            
-            // Haberlerde arama
-            filteredNews = news.filter { 
-                $0.title.lowercased().contains(lowercasedQuery)
+            isSearching = false
+            return
+        }
+        
+        isSearching = true
+        
+        // Arama sorgusunu optimize et
+        let lowercasedQuery = query.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        // Coin araması - daha kapsamlı arama yapabilmek için
+        filteredCoins = coins.filter { coin in
+            coin.name.lowercased().contains(lowercasedQuery) || 
+            coin.symbol.lowercased().contains(lowercasedQuery)
+        }
+        
+        // Eğer yeterli sonuç yoksa ve daha fazla coin yüklenebiliyorsa
+        if filteredCoins.count < 10 && coins.count < 500 {
+            // Daha fazla coin yükle ve sonra sonuçları güncelle
+            Task {
+                await loadMoreCoins()
             }
         }
+        
+        // Haberlerde arama
+        filteredNews = news.filter { news in
+            news.title.lowercased().contains(lowercasedQuery) ||
+            news.description.lowercased().contains(lowercasedQuery)
+        }
+        
+        isSearching = false
     }
 }
 
@@ -372,6 +335,31 @@ struct NewsItem: Identifiable, Hashable, Comparable {
     }
 }
 */
+
+// MARK: - API Model Converters
+// APIService modellerini yerel modellere dönüştürme uzantıları
+extension NewsItem {
+    static func fromAPIModel(_ apiModel: APIService.APINewsItem) -> NewsItem {
+        return NewsItem(
+            id: apiModel.id,
+            title: apiModel.title,
+            description: apiModel.description,
+            url: apiModel.url,
+            imageUrl: apiModel.imageUrl,
+            source: apiModel.source,
+            publishedAt: apiModel.publishedAt
+        )
+    }
+}
+
+extension GraphPoint {
+    static func fromAPIModel(_ apiModel: APIService.APIGraphPoint) -> GraphPoint {
+        return GraphPoint(
+            timestamp: apiModel.timestamp,
+            price: apiModel.price
+        )
+    }
+}
 
 // Ana uygulamanın tab view yapısı
 struct MainTabView: View {
@@ -668,29 +656,67 @@ struct SearchView: View {
                 Color.black.edgesIgnoringSafeArea(.all)
                 
                 VStack(spacing: 20) {
-                    TextField("Kripto para ara...", text: $searchText)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .padding(.horizontal)
-                        .padding(.top, 10)
-                        .onChange(of: searchText) { oldValue, newValue in
-                            viewModel.searchCoins(newValue)
+                    // Arama Çubuğu
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray)
+                            .padding(.leading, 8)
+                        
+                        TextField("Kripto para ara...", text: $searchText)
+                            .padding(10)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                            .onChange(of: searchText) { oldValue, newValue in
+                                viewModel.searchCoins(newValue)
+                            }
+                            .foregroundColor(.white)
+                        
+                        if !searchText.isEmpty {
+                            Button(action: {
+                                searchText = ""
+                                viewModel.searchCoins("")
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }
                         }
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 10)
                     
-                    if viewModel.isLoading {
+                    if viewModel.isLoading && viewModel.coins.isEmpty {
+                        // İlk yükleme durumu
                         Spacer()
                         ProgressView()
                             .scaleEffect(1.5)
                             .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
+                        Text("Kripto paralar yükleniyor...")
+                            .foregroundColor(.gray)
+                            .padding(.top, 20)
                         Spacer()
                     } else if !searchText.isEmpty {
-                        // Arama sonuçları
+                        // Arama Sonuçları
                         ScrollView {
                             VStack(alignment: .leading, spacing: 15) {
                                 if !viewModel.filteredCoins.isEmpty {
-                                    Text("Coinler")
-                                        .font(.headline)
-                        .foregroundColor(.white)
-                                        .padding(.horizontal)
+                                    HStack {
+                                        Text("Coinler")
+                                            .font(.headline)
+                                            .foregroundColor(.white)
+                                        
+                                        Spacer()
+                                        
+                                        if viewModel.isSearching {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
+                                                .scaleEffect(0.7)
+                                        } else {
+                                            Text("\(viewModel.filteredCoins.count) sonuç")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                        }
+                                    }
+                                    .padding(.horizontal)
                                     
                                     ForEach(viewModel.filteredCoins) { coin in
                                         Button(action: {
@@ -701,6 +727,39 @@ struct SearchView: View {
                                         }
                                         .padding(.horizontal)
                                     }
+                                    
+                                    // Daha fazla sonuç yükleme butonu
+                                    if viewModel.filteredCoins.count >= 10 && !viewModel.isLoadingMoreCoins {
+                                        Button(action: {
+                                            Task {
+                                                await viewModel.loadMoreCoins()
+                                            }
+                                        }) {
+                                            HStack {
+                                                Text("Daha Fazla Sonuç")
+                                                    .font(.subheadline)
+                                                    .foregroundColor(AppColorsTheme.gold)
+                                                
+                                                Image(systemName: "arrow.down.circle")
+                                                    .foregroundColor(AppColorsTheme.gold)
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                            .padding()
+                                            .background(Color(.systemGray6))
+                                            .cornerRadius(10)
+                                        }
+                                        .padding(.horizontal)
+                                    }
+                                    
+                                    if viewModel.isLoadingMoreCoins {
+                                        HStack {
+                                            Spacer()
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
+                                            Spacer()
+                                        }
+                                        .padding()
+                                    }
                                 }
                                 
                                 if !viewModel.filteredNews.isEmpty {
@@ -708,7 +767,7 @@ struct SearchView: View {
                                         .font(.headline)
                                         .foregroundColor(.white)
                                         .padding(.horizontal)
-                        .padding(.top, 10)
+                                        .padding(.top, 10)
                     
                                     ForEach(viewModel.filteredNews) { news in
                                         Button(action: {
@@ -719,34 +778,72 @@ struct SearchView: View {
                                         }) {
                                             SearchNewsRow(news: news)
                                         }
-                        .padding(.horizontal)
+                                        .padding(.horizontal)
                                     }
                                 }
                                 
                                 if viewModel.filteredCoins.isEmpty && viewModel.filteredNews.isEmpty {
-                                    Text("Arama sonucu bulunamadı")
-                                        .foregroundColor(.gray)
-                                        .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.top, 30)
+                                    VStack(spacing: 15) {
+                                        Image(systemName: "magnifyingglass")
+                                            .font(.system(size: 40))
+                                            .foregroundColor(.gray)
+                                        
+                                        Text("Arama sonucu bulunamadı")
+                                            .font(.headline)
+                                            .foregroundColor(.gray)
+                                        
+                                        Text("Farklı bir arama terimi deneyin veya daha fazla coin yükleyin")
+                                            .font(.subheadline)
+                                            .foregroundColor(.gray.opacity(0.8))
+                                            .multilineTextAlignment(.center)
+                                        
+                                        Button(action: {
+                                            Task {
+                                                await viewModel.loadMoreCoins()
+                                            }
+                                        }) {
+                                            Text("Daha Fazla Coin Yükle")
+                                                .font(.headline)
+                                                .foregroundColor(.black)
+                                                .padding(.vertical, 12)
+                                                .padding(.horizontal, 20)
+                                                .background(AppColorsTheme.gold)
+                                                .cornerRadius(10)
+                                        }
+                                        .padding(.top, 10)
+                                    }
+                                    .padding()
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                    .padding(.top, 50)
                                 }
                             }
                             .padding(.vertical)
                         }
                     } else {
                         // Coin logoları matrisi
-                        CryptoSearchAnimationView(type: animationType, coinNames: viewModel.coinNames, logos: viewModel.initialLogos) { coinName in
-                            if let coin = viewModel.coins.first(where: { $0.name == coinName }) {
-                                selectedCoinID = coin.id
-                                showingCoinDetail = true
+                        VStack(spacing: 20) {
+                            Text("Popüler Kripto Paralar")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal)
+                            
+                            CryptoSearchAnimationView(type: animationType, coinNames: viewModel.coinNames, logos: viewModel.initialLogos) { coinName in
+                                if let coin = viewModel.coins.first(where: { $0.name == coinName }) {
+                                    selectedCoinID = coin.id
+                                    showingCoinDetail = true
+                                }
                             }
+                            
+                            Spacer()
                         }
-                        .padding(.top, 20)
+                        .padding(.top, 10)
                     }
                     
                     Spacer()
                 }
             }
-            .navigationTitle("Search")
+            .navigationTitle("Ara")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
@@ -755,13 +852,13 @@ struct SearchView: View {
                         Image(systemName: "person.circle.fill")
                             .foregroundColor(AppColorsTheme.gold)
                             .imageScale(.large)
+                    }
                 }
             }
-        }
-        .onAppear {
+            .onAppear {
                 // Verileri yükle
-            viewModel.loadInitialData()
-        }
+                viewModel.loadInitialData()
+            }
             .sheet(isPresented: $showingCoinDetail) {
                 CoinDetailView(coinId: selectedCoinID)
             }
@@ -814,7 +911,7 @@ struct CoinLogoCircle: View {
                     .shadow(color: .black.opacity(0.2), radius: 3)
                 
                 if let logoURL = logoURL, let url = URL(string: logoURL) {
-                    CachedAsyncImage(url: url) { phase in
+                    AsyncImage(url: url) { phase in
                         switch phase {
                         case .success(let image):
                             image
@@ -858,7 +955,7 @@ struct SearchCoinRow: View {
         HStack {
             // Logo
             if let url = URL(string: coin.image) {
-                CachedAsyncImage(url: url) { phase in
+                AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
                         image
@@ -1095,7 +1192,7 @@ struct CoinDetailView: View {
                 
                 // Haberleri yüklemeye çalış
                 await loadNews(for: detailedCoin)
-            } catch APIError.coinNotFound {
+            } catch APIService.APIError.coinNotFound {
                 print("⚠️ Coin bulunamadı: \(coinId)")
                 
                 // Fallback olarak temel coin verileri almaya çalış
@@ -1107,17 +1204,22 @@ struct CoinDetailView: View {
                         self.errorMessage = "Bu coin için veri bulunamadı. Lütfen daha sonra tekrar deneyin."
                     }
                 }
-            } catch APIError.invalidResponse {
+            } catch APIService.APIError.invalidResponse {
                 print("❌ API'den geçersiz yanıt alındı")
                 await MainActor.run {
                     self.isLoading = false
                     self.errorMessage = "Sunucu şu anda yanıt vermiyor. Lütfen daha sonra tekrar deneyin."
                 }
-            } catch APIError.allAPIsFailed {
+            } catch APIService.APIError.allAPIsFailed {
                 print("❌ Tüm API kaynakları başarısız oldu")
                 await MainActor.run {
                     self.isLoading = false
                     self.errorMessage = "İnternet bağlantınızı kontrol edin ve tekrar deneyin."
+                }
+            } catch URLError.timedOut {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.errorMessage = "Bağlantı zaman aşımına uğradı. Lütfen daha sonra tekrar deneyin."
                 }
             } catch {
                 print("❌ Coin detayları yüklenirken hata: \(error)")
@@ -1159,7 +1261,7 @@ struct CoinDetailView: View {
             // Haberleri almaya çalış
             await loadNews(for: foundCoin)
         } else {
-            throw APIError.coinNotFound
+            throw APIService.APIError.coinNotFound
         }
     }
     
@@ -1167,12 +1269,15 @@ struct CoinDetailView: View {
         Task {
             do {
                 print("📈 Fiyat geçmişi alınıyor: \(coinId) - \(period.rawValue)")
-                let historyData = try await APIService.shared.fetchCoinPriceHistory(coinId: coinId, days: period.days)
+                let apiHistoryData = try await APIService.shared.fetchCoinPriceHistory(coinId: coinId, days: period.days)
                 
-                guard !historyData.isEmpty else {
+                guard !apiHistoryData.isEmpty else {
                     print("⚠️ Fiyat geçmişi boş")
                     return
                 }
+                
+                // API modellerini uygulama modellerine dönüştür
+                let historyData = apiHistoryData.map { GraphPoint.fromAPIModel($0) }
                 
                 print("✅ \(historyData.count) adet grafik noktası alındı")
                 
@@ -1191,7 +1296,11 @@ struct CoinDetailView: View {
     private func loadNews(for coin: Coin) async {
         do {
             print("📰 \(coin.name) için haberler yükleniyor...")
-            let allNews = try await APIService.shared.fetchNews()
+            let apiNews = try await APIService.shared.fetchNews()
+            
+            // API modellerini uygulama modellerine dönüştür
+            let allNews = apiNews.map { NewsItem.fromAPIModel($0) }
+            
             print("✅ \(allNews.count) haber alındı")
             
             // Coin adı, sembolü ve related keywords ile filtrele
@@ -1402,7 +1511,7 @@ struct CoinHeaderView: View {
     var body: some View {
         HStack {
             if let url = URL(string: coin.image) {
-                CachedAsyncImage(url: url) { phase in
+                AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
                         image
