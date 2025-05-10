@@ -146,7 +146,7 @@ class SearchViewModel: ObservableObject {
     }
     
     private func handleError(_ error: Error) {
-        if let apiError = error as? APIError {
+        if let apiError = error as? APIService.APIError {
             switch apiError {
             case .allAPIsFailed:
                 errorMessage = "Arama yapılamıyor. İnternet bağlantınızı kontrol edin."
