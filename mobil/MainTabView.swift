@@ -232,7 +232,17 @@ class SearchViewModelLight: ObservableObject, @unchecked Sendable {
         do {
             let fetchedNews = try await APIService.shared.fetchNews()
             // Convert API model to app model
-            self.news = fetchedNews.map { NewsItem.fromAPIModel($0) }
+            self.news = fetchedNews.map { apiItem in
+                NewsItem(
+                    id: apiItem.id,
+                    title: apiItem.title,
+                    description: apiItem.description,
+                    url: apiItem.url,
+                    imageUrl: apiItem.imageUrl,
+                    source: apiItem.source,
+                    publishedAt: apiItem.publishedAt
+                )
+            }
             self.lastNewsFetchTime = Date()
             
             // Önbelleğe kaydet
@@ -335,75 +345,6 @@ struct NewsItem: Identifiable, Hashable, Comparable {
     }
 }
 */
-
-// MARK: - API Model Converters
-// APIService modellerini yerel modellere dönüştürme uzantıları
-extension NewsItem {
-    static func fromAPIModel(_ apiModel: APIService.APINewsItem) -> NewsItem {
-        return NewsItem(
-            id: apiModel.id,
-            title: apiModel.title,
-            description: apiModel.description,
-            url: apiModel.url,
-            imageUrl: apiModel.imageUrl,
-            source: apiModel.source,
-            publishedAt: apiModel.publishedAt
-        )
-    }
-}
-
-extension GraphPoint {
-    static func fromAPIModel(_ apiModel: APIService.APIGraphPoint) -> GraphPoint {
-        return GraphPoint(
-            timestamp: apiModel.timestamp,
-            price: apiModel.price
-        )
-    }
-}
-
-// Ana uygulamanın tab view yapısı
-struct MainTabView: View {
-    @State private var showingLoginView = false
-    
-    var body: some View {
-        TabView {
-            MarketView(showingLoginView: $showingLoginView)
-                .tabItem {
-                    Image(systemName: "chart.bar.fill")
-                    Text("Markets")
-                }
-            
-            NewsView()
-                .tabItem {
-                    Image(systemName: "newspaper.fill")
-                    Text("News")
-                }
-            
-            SearchView(showingLoginView: $showingLoginView)
-                .tabItem {
-                    Image(systemName: "magnifyingglass")
-                    Text("Search")
-                }
-            
-            PortfolioView(showingLoginView: $showingLoginView)
-                .tabItem {
-                    Image(systemName: "chart.pie.fill")
-                    Text("Portfolio")
-                }
-            
-            CommunityView(showingLoginView: $showingLoginView)
-                .tabItem {
-                    Image(systemName: "person.3.fill")
-                    Text("Community")
-                }
-        }
-        .accentColor(AppColorsTheme.gold)
-        .sheet(isPresented: $showingLoginView) {
-            LoginView(isPresented: $showingLoginView)
-        }
-        .preferredColorScheme(.dark)
-    }
-}
 
 // MARK: - Market View
 struct MarketView: View {
@@ -1299,7 +1240,17 @@ struct CoinDetailView: View {
             let apiNews = try await APIService.shared.fetchNews()
             
             // API modellerini uygulama modellerine dönüştür
-            let allNews = apiNews.map { NewsItem.fromAPIModel($0) }
+            let allNews = apiNews.map { apiItem in
+                NewsItem(
+                    id: apiItem.id,
+                    title: apiItem.title,
+                    description: apiItem.description,
+                    url: apiItem.url,
+                    imageUrl: apiItem.imageUrl,
+                    source: apiItem.source,
+                    publishedAt: apiItem.publishedAt
+                )
+            }
             
             print("✅ \(allNews.count) haber alındı")
             
@@ -2054,6 +2005,60 @@ struct CommunityView: View {
                 isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
             }
         }
+    }
+}
+
+// API modellerini yerel modellere dönüştürme uzantıları
+extension GraphPoint {
+    static func fromAPIModel(_ apiModel: APIService.APIGraphPoint) -> GraphPoint {
+        return GraphPoint(
+            timestamp: apiModel.timestamp,
+            price: apiModel.price
+        )
+    }
+}
+
+// Ana uygulamanın tab view yapısı
+struct MainTabView: View {
+    @State private var showingLoginView = false
+    
+    var body: some View {
+        TabView {
+            MarketView(showingLoginView: $showingLoginView)
+                .tabItem {
+                    Image(systemName: "chart.bar.fill")
+                    Text("Markets")
+                }
+            
+            NewsView()
+                .tabItem {
+                    Image(systemName: "newspaper.fill")
+                    Text("News")
+                }
+            
+            SearchView(showingLoginView: $showingLoginView)
+                .tabItem {
+                    Image(systemName: "magnifyingglass")
+                    Text("Search")
+                }
+            
+            PortfolioView(showingLoginView: $showingLoginView)
+                .tabItem {
+                    Image(systemName: "chart.pie.fill")
+                    Text("Portfolio")
+                }
+            
+            CommunityView(showingLoginView: $showingLoginView)
+                .tabItem {
+                    Image(systemName: "person.3.fill")
+                    Text("Community")
+                }
+        }
+        .accentColor(AppColorsTheme.gold)
+        .sheet(isPresented: $showingLoginView) {
+            LoginView(isPresented: $showingLoginView)
+        }
+        .preferredColorScheme(.dark)
     }
 }
 
