@@ -248,12 +248,15 @@ final class CoinListViewModel: ObservableObject {
     @Published var allPagesLoaded = false
     
     private var currentPage = 1
-    private let coinsPerPage = 20 // 30'dan 20'ye düşür - daha hızlı ilk yükleme
+    private let coinsPerPage = 100 // 20'den 100'e çıkarıyoruz - daha çok coin görüntülenmesi için
     
     @MainActor
     func fetchCoins() async {
         isLoading = true
         do {
+            // API'nin varsayılan olarak denendiğini belirten API kaynağı
+            currentAPI = "API'ye bağlanıyor..."
+            
             let fetchResult = try await APIService.shared.fetchCoins(page: currentPage, perPage: coinsPerPage)
             let newCoins = fetchResult.coins
             let apiSource = fetchResult.source
@@ -267,15 +270,21 @@ final class CoinListViewModel: ObservableObject {
             // API kaynağını güncelle
             currentAPI = apiSource
             
-            // Tüm sayfalar yüklendi mi kontrol et
-            allPagesLoaded = newCoins.count < coinsPerPage
+            // Başarılı veri geldi mi kontrol et
+            if newCoins.isEmpty && currentPage == 1 {
+                errorMessage = "Hiç coin bulunamadı. Lütfen internet bağlantınızı kontrol edin veya daha sonra tekrar deneyin."
+            } else {
+                // Tüm sayfalar yüklendi mi kontrol et
+                allPagesLoaded = newCoins.count < coinsPerPage
+                errorMessage = nil
+            }
             
-        } catch APIError.allAPIsFailed {
-            errorMessage = "Hiçbir API kaynağından veri alınamadı. Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin.\n\nİpucu: Uygulamamız CoinGecko, CoinMarketCap, CoinStats, CoinCap, CryptoCompare, CoinLayer ve CoinPaprika API'lerini kullanır, internet bağlantınızı kontrol edin veya daha sonra tekrar deneyin."
-        } catch APIError.rateLimitExceeded {
-            errorMessage = "API hız limiti aşıldı. Lütfen bir süre sonra tekrar deneyin.\n\nİpucu: Birkaç dakika bekleyip tekrar deneyin veya uygulama ayarlarından farklı bir API kaynağı seçmeyi deneyin."
+        } catch APIService.APIError.allAPIsFailed {
+            errorMessage = "Hiçbir API kaynağından veri alınamadı. Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin.\n\nİpucu: Uygulamamız CoinGecko, CoinMarketCap ve CoinCap API'lerini kullanır."
+        } catch APIService.APIError.rateLimitExceeded {
+            errorMessage = "API hız limiti aşıldı. Lütfen bir süre sonra tekrar deneyin.\n\nİpucu: Birkaç dakika bekleyip tekrar deneyin."
         } catch URLError.timedOut {
-            errorMessage = "Sunucuya bağlanırken zaman aşımı oluştu. İnternet bağlantınızı kontrol edin veya farklı bir ağa bağlanmayı deneyin."
+            errorMessage = "Sunucuya bağlanırken zaman aşımı oluştu. İnternet bağlantınızı kontrol edin."
         } catch URLError.notConnectedToInternet {
             errorMessage = "İnternet bağlantısı bulunamadı. Lütfen ağ ayarlarınızı kontrol edin ve Wi-Fi veya mobil verinin açık olduğundan emin olun."
         } catch {
@@ -398,8 +407,9 @@ struct CoinRowView: View {
             
             // Logo ve isim
             HStack(spacing: 8) {
+                // Logo
                 if let url = URL(string: coin.image) {
-                    CachedAsyncImage(url: url) { phase in
+                    AsyncImage(url: url) { phase in
                         switch phase {
                         case .success(let image):
                             image
@@ -424,6 +434,17 @@ struct CoinRowView: View {
                             EmptyView()
                         }
                     }
+                    .frame(width: 30, height: 30)
+                } else {
+                    // Coin logosu yoksa sembolün ilk harfini göster
+                    Circle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 30, height: 30)
+                        .overlay(
+                            Text(coin.symbol.prefix(1))
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.gray)
+                        )
                 }
                 
                 VStack(alignment: .leading, spacing: 2) {
