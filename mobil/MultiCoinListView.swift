@@ -328,7 +328,7 @@ class MultiCoinViewModel: ObservableObject {
     
     private let apiService = APIService.shared
     private var currentPage = 1
-    private let coinsPerPage = 20 // Sayfa başına 20 coin
+    private let coinsPerPage = 100 // 20'den 100'e çıkarıyoruz - daha çok coin yüklenecek
     
     // Initialize and load coins
     init() {
@@ -395,11 +395,23 @@ class MultiCoinViewModel: ObservableObject {
                 return
             }
             
+            // Yüklemeye başladığını bildir
+            if isRefresh {
+                activeAPIs = ["Yükleniyor..."]
+            }
+            
             // Her seferinde 20 coin yükle
             let response = try await apiService.fetchCoins(page: currentPage, perPage: coinsPerPage)
             
             // Update active API source
             activeAPIs = [response.source]
+            
+            // Gelen veri boş mu kontrol et
+            if response.coins.isEmpty && isRefresh {
+                error = "Hiç coin bulunamadı. Lütfen internet bağlantınızı kontrol edin."
+                isLoaded = false
+                return
+            }
             
             print("📊 API'den \(response.coins.count) coin alındı")
             
@@ -449,9 +461,9 @@ class MultiCoinViewModel: ObservableObject {
             isLoaded = true
             error = nil
             
-        } catch APIError.allAPIsFailed {
+        } catch APIService.APIError.allAPIsFailed {
             self.error = "Hiçbir API kaynağından veri alınamadı. Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin.\n\nUygulamamız CoinGecko, CoinMarketCap, CoinStats, CoinCap, CryptoCompare, CoinLayer ve CoinPaprika API'lerini kullanır."
-        } catch APIError.rateLimitExceeded {
+        } catch APIService.APIError.rateLimitExceeded {
             self.error = "API hız limiti aşıldı. Lütfen bir süre sonra tekrar deneyin."
         } catch URLError.timedOut {
             self.error = "Sunucuya bağlanırken zaman aşımı oluştu. İnternet bağlantınızı kontrol edin."
