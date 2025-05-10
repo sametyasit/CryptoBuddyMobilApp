@@ -133,10 +133,7 @@ struct CoinListView: View {
                     ScrollView {
                         LazyVStack(spacing: 15) {
                             ForEach(Array(viewModel.coins.enumerated()), id: \.element.id) { index, coin in
-                                Button(action: {
-                                    self.selectedCoinId = coin.id
-                                    self.showCoinDetail = true
-                                }) {
+                                NavigationLink(destination: CoinDetailView(coinId: coin.id)) {
                                     CoinRowView(coin: coin, displayRank: index + 1)
                                         .padding(.horizontal)
                                 }
@@ -185,6 +182,23 @@ struct CoinListView: View {
                 }
             }
             
+            // CoinDetailView sheet
+            .fullScreenCover(isPresented: $showCoinDetail) {
+                if let coinId = selectedCoinId {
+                    NavigationView {
+                        CoinDetailView(coinId: coinId)
+                            .navigationBarItems(leading: Button(action: {
+                                self.showCoinDetail = false
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(AppColorsTheme.gold)
+                                    .imageScale(.large)
+                                    .padding(8)
+                            })
+                    }
+                }
+            }
+            
             // Tam ekran yükleme indikatörü
             if viewModel.isLoading && viewModel.coins.isEmpty {
                 Color.black.opacity(0.7)
@@ -218,21 +232,13 @@ struct CoinListView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $showCoinDetail) {
-            if let coinId = selectedCoinId {
-                NavigationView {
-                    CoinDetailView(coinId: coinId)
-                        .navigationBarItems(leading: Button(action: {
-                            self.showCoinDetail = false
-                        }) {
-                            Image(systemName: "xmark")
-                                .foregroundColor(.white)
-                                .padding(8)
-                                .background(Color.black.opacity(0.5))
-                                .clipShape(Circle())
-                        })
-                        .navigationBarTitleDisplayMode(.inline)
-                }
+    }
+
+    // Content View Preview
+    struct CoinListView_Previews: PreviewProvider {
+        static var previews: some View {
+            NavigationView {
+                CoinListView()
             }
         }
     }
