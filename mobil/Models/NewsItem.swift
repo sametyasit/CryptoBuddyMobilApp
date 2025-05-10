@@ -25,4 +25,20 @@ struct NewsItem: Identifiable, Comparable, Codable {
     static func == (lhs: NewsItem, rhs: NewsItem) -> Bool {
         return lhs.id == rhs.id
     }
+}
+
+// API model dönüştürme uzantısı
+extension NewsItem {
+    // API modelinden dönüştürme - Farklı isim verdik
+    static func convertFromAPIModel(_ apiModel: APIService.APINewsItem) -> NewsItem {
+        return NewsItem(
+            id: apiModel.id,
+            title: apiModel.title,
+            description: apiModel.description,
+            url: apiModel.url,
+            imageUrl: apiModel.imageUrl,
+            source: apiModel.source,
+            publishedAt: apiModel.publishedAt
+        )
+    }
 } 
