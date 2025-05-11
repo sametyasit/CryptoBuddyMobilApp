@@ -1,5 +1,7 @@
 import SwiftUI
 
-struct AppColors {
-    static let gold = Color(red: 255/255, green: 215/255, blue: 0/255)
+struct AppColorsTheme {
+    static let gold = Color(red: 0.984, green: 0.788, blue: 0.369)
+    static let darkGray = Color(UIColor.darkGray)
+    static let black = Color.black
 } 
