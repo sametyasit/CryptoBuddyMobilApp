@@ -146,12 +146,9 @@ class SearchViewModel: ObservableObject {
     }
     
     private func handleError(_ error: Error) {
-        if let apiError = error as? APIService.APIError {
+        if let apiError = error as? APIError{
             switch apiError {
-            case .allAPIsFailed:
-                errorMessage = "Arama yapılamıyor. İnternet bağlantınızı kontrol edin."
-            case .rateLimitExceeded:
-                errorMessage = "API hız sınırı aşıldı. Lütfen daha sonra tekrar deneyin."
+          
             default:
                 errorMessage = "Veri yüklenirken bir sorun oluştu. Lütfen tekrar deneyin."
             }
