@@ -28,41 +28,54 @@ enum NewsError: Error {
     }
 }
 
+// MARK: - Model
+enum NewsCategory: String, CaseIterable, Identifiable {
+    case all = "All"
+    case crypto = "Crypto"
+    case trading = "Trading"
+    case technology = "Technology"
+    case regulation = "Regulation"
+    case mining = "Mining"
+    case defi = "DeFi"
+    case nft = "NFT"
+    case metaverse = "Metaverse"
+    
+    var id: String { self.rawValue }
+}
+
 // MARK: - News Service
-final class NewsServiceImpl {
+final class NewsServiceImpl: ObservableObject {
     static let shared = NewsServiceImpl()
-    private init() {}
+    @Published var newsItems: [NewsItem] = []
+    @Published var isLoading = true
+    @Published var errorMessage: String? = nil
+    @Published var currentPage = 1
+    @Published var hasMorePages = true
+    @Published var isLoadingMore = false
+    
+    private init() {
+        loadNews()
+    }
     
     private let apiKey = "c1086e4db7b5078baef89a7a374128c506a68d2aea26e434640986920610af78" // Replace with your CryptoCompare API key
     private let baseURL = "https://min-api.cryptocompare.com/data/v2/news/"
     
-    enum NewsCategory: String, CaseIterable {
-        case all = "All"
-        case trading = "Trading"
-        case technology = "Technology"
-        case regulation = "Regulation"
-        case mining = "Mining"
-        case defi = "DeFi"
-        case nft = "NFT"
-        case metaverse = "Metaverse"
-    }
-    
-    struct NewsItem: Identifiable, Hashable {
+    struct NewsItem: Identifiable {
         let id: String
         let title: String
         let description: String
         let url: String
         let imageUrl: String
-        let publishedAt: Date
         let source: String
-        let category: NewsCategory
+        let publishedAt: Date
         
-        static func == (lhs: NewsItem, rhs: NewsItem) -> Bool {
-            lhs.id == rhs.id
-        }
-        
-        func hash(into hasher: inout Hasher) {
-            hasher.combine(id)
+        // Kategorileri etiketlere dayalı kontrol etmek için yardımcı işlev
+        func matchesCategory(_ category: NewsCategory) -> Bool {
+            if category == .all {
+                return true
+            }
+            let content = title.lowercased() + " " + description.lowercased()
+            return content.contains(category.rawValue.lowercased())
         }
     }
     
@@ -100,9 +113,8 @@ final class NewsServiceImpl {
                     description: news.body,
                     url: news.url,
                     imageUrl: news.imageurl,
-                    publishedAt: Date(timeIntervalSince1970: TimeInterval(news.published_on)),
                     source: news.source,
-                    category: determineCategory(from: news.categories)
+                    publishedAt: Date(timeIntervalSince1970: TimeInterval(news.published_on))
                 )
             }
         } catch {
@@ -132,230 +144,6 @@ final class NewsServiceImpl {
         
         return .all
     }
-}
-
-// CryptoCompare API Response Models
-private struct CryptoCompareResponse: Codable {
-    let Data: [CryptoCompareNews]
-}
-
-private struct CryptoCompareNews: Codable {
-    let id: String
-    let title: String
-    let body: String
-    let url: String
-    let imageurl: String
-    let published_on: Int
-    let source: String
-    let categories: String
-}
-
-// MARK: - View Model
-final class NewsViewModel: ObservableObject {
-    @Published var allNews: [NewsServiceImpl.NewsItem] = []
-    @Published var filteredNews: [NewsServiceImpl.NewsItem] = []
-    @Published var isLoading = false
-    @Published var isLoadingMore = false
-    @Published var error: NewsError?
-    @Published var selectedCategory: NewsServiceImpl.NewsCategory = .all
-    @Published var activeSources: Set<String> = []
-    @Published var searchText: String = ""
-    
-    private let newsService = NewsServiceImpl.shared
-    private var currentPage = 1
-    private var timer: Timer?
-    
-    func startAutoRefresh() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { [weak self] _ in
-            Task { await self?.fetchNews(force: true) }
-        }
-    }
-    
-    func stopAutoRefresh() {
-        timer?.invalidate()
-        timer = nil
-    }
-    
-    func fetchNews(force: Bool = false) async {
-        await MainActor.run {
-            isLoading = true
-            error = nil
-        }
-        do {
-            let news = try await newsService.fetchNews(category: .all, page: 1)
-            await MainActor.run {
-                self.allNews = news
-                self.applyFilters()
-                updateActiveSources()
-                isLoading = false
-                currentPage = 1
-            }
-        } catch let error as NewsError {
-            await MainActor.run {
-                self.error = error
-                self.isLoading = false
-            }
-        } catch {
-            await MainActor.run {
-                self.error = .networkError
-                self.isLoading = false
-            }
-        }
-    }
-    
-    func loadMoreNews() async {
-        guard !isLoadingMore else { return }
-        await MainActor.run {
-            isLoadingMore = true
-            currentPage += 1
-        }
-        do {
-            let news = try await newsService.fetchNews(category: .all, page: currentPage)
-            await MainActor.run {
-                self.allNews.append(contentsOf: news)
-                self.applyFilters()
-                updateActiveSources()
-                isLoadingMore = false
-            }
-        } catch {
-            await MainActor.run {
-                currentPage -= 1
-                isLoadingMore = false
-                self.error = error as? NewsError ?? .networkError
-            }
-        }
-    }
-    
-    func selectCategory(_ category: NewsServiceImpl.NewsCategory) {
-        selectedCategory = category
-        applyFilters()
-    }
-    
-    func updateSearchText(_ text: String) {
-        searchText = text
-        applyFilters()
-    }
-    
-    private func applyFilters() {
-        if !searchText.isEmpty {
-            filteredNews = allNews.filter { news in
-                news.title.localizedCaseInsensitiveContains(searchText) ||
-                news.description.localizedCaseInsensitiveContains(searchText)
-            }
-        } else if selectedCategory != .all {
-            filteredNews = allNews.filter { $0.category == selectedCategory }
-        } else {
-            filteredNews = allNews
-        }
-    }
-    
-    private func updateActiveSources() {
-        activeSources = Set(filteredNews.map { $0.source.components(separatedBy: ":").first ?? "" })
-    }
-}
-
-// MARK: - Views
-struct NewsView: View {
-    @State private var newsItems: [NewsServiceImpl.NewsItem] = []
-    @State private var isLoading = true
-    @State private var errorMessage: String? = nil
-    @State private var currentPage = 1
-    @State private var isLoadingMore = false
-    @State private var hasMorePages = true
-    
-    private let goldColor = Color(red: 0.984, green: 0.788, blue: 0.369)
-    
-    var body: some View {
-        NavigationView {
-            ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
-                
-                VStack {
-                    if isLoading && newsItems.isEmpty {
-                        Spacer()
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: goldColor))
-                            .scaleEffect(1.5)
-                        Spacer()
-                    } else if let error = errorMessage, newsItems.isEmpty {
-                        Spacer()
-                        VStack(spacing: 20) {
-                            Image(systemName: "newspaper.fill")
-                                .font(.system(size: 60))
-                                .foregroundColor(goldColor)
-                            
-                            Text("Haberler yüklenemedi")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.white)
-                            
-                            Text(error)
-                                .foregroundColor(.gray)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal)
-                            
-                            Button(action: {
-                                loadNews()
-                            }) {
-                                Text("Yeniden Dene")
-                                    .fontWeight(.medium)
-                                    .padding()
-                                    .frame(width: 150)
-                                    .background(goldColor)
-                                    .foregroundColor(.black)
-                                    .cornerRadius(10)
-                            }
-                        }
-                        .padding()
-                        Spacer()
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 0) {
-                                ForEach(newsItems) { newsItem in
-                                    NewsItemView(item: newsItem)
-                                        .padding(.horizontal)
-                                        .padding(.vertical, 8)
-                                }
-                                
-                                if isLoadingMore {
-                                    HStack {
-                                        Spacer()
-                                        ProgressView()
-                                            .progressViewStyle(CircularProgressViewStyle(tint: goldColor))
-                                        Spacer()
-                                    }
-                                    .padding()
-                                } else if hasMorePages {
-                                    Button(action: {
-                                        loadMoreNews()
-                                    }) {
-                                        Text("Daha Fazla Göster")
-                                            .foregroundColor(goldColor)
-                                            .padding()
-                                            .frame(maxWidth: .infinity)
-                                            .background(Color(UIColor.systemGray6).opacity(0.2))
-                                            .cornerRadius(10)
-                                    }
-                                    .padding()
-                                }
-                            }
-                        }
-                        .refreshable {
-                            await refreshNews()
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Haberler")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                if newsItems.isEmpty {
-                    loadNews()
-                }
-            }
-        }
-    }
     
     private func loadNews() {
         isLoading = true
@@ -363,12 +151,27 @@ struct NewsView: View {
         
         Task {
             do {
-                let items = try await APIService.shared.fetchNews()
+                let apiItems = try await APIService.shared.fetchNews()
                 DispatchQueue.main.async {
-                    self.newsItems = items
+                    // Convert API model to our model
+                    self.newsItems = apiItems.map { apiItem in
+                        // Parse date
+                        let formatter = ISO8601DateFormatter()
+                        let date = formatter.date(from: apiItem.publishedAt) ?? Date()
+                        
+                        return NewsItem(
+                            id: apiItem.id,
+                            title: apiItem.title,
+                            description: apiItem.description,
+                            url: apiItem.url,
+                            imageUrl: apiItem.imageUrl,
+                            source: apiItem.source,
+                            publishedAt: date
+                        )
+                    }
                     self.isLoading = false
                     self.currentPage = 1
-                    self.hasMorePages = items.count >= 20
+                    self.hasMorePages = self.newsItems.count >= 20
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -386,170 +189,116 @@ struct NewsView: View {
         
         Task {
             do {
-                let items = try await APIService.shared.fetchNews()
+                let apiItems = try await APIService.shared.fetchNews()
                 
-                DispatchQueue.main.async {
-                    isLoadingMore = false
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    
+                    self.isLoadingMore = false
                     
                     // Filter out duplicates
-                    let existingIds = Set(newsItems.map { $0.id })
-                    let newItems = items.filter { !existingIds.contains($0.id) }
+                    let existingIds = Set(self.newsItems.map { $0.id })
+                    
+                    // Convert API model to our model
+                    let newItems = apiItems
+                        .filter { !existingIds.contains($0.id) }
+                        .map { apiItem in
+                            let formatter = ISO8601DateFormatter()
+                            let date = formatter.date(from: apiItem.publishedAt) ?? Date()
+                            
+                            return NewsItem(
+                                id: apiItem.id,
+                                title: apiItem.title,
+                                description: apiItem.description,
+                                url: apiItem.url,
+                                imageUrl: apiItem.imageUrl,
+                                source: apiItem.source,
+                                publishedAt: date
+                            )
+                        }
                     
                     if !newItems.isEmpty {
-                        newsItems.append(contentsOf: newItems)
-                        currentPage += 1
+                        self.newsItems.append(contentsOf: newItems)
+                        self.currentPage += 1
                     }
                     
-                    hasMorePages = newItems.count >= 10
+                    self.hasMorePages = newItems.count >= 10
                 }
-            } catch {
-                DispatchQueue.main.async {
-                    isLoadingMore = false
-                    hasMorePages = false
-                }
-            }
-        }
-    }
-    
-    private func refreshNews() async {
-        do {
-            let items = try await APIService.shared.fetchNews()
-            
-            DispatchQueue.main.async {
-                newsItems = items
-                currentPage = 1
-                hasMorePages = items.count >= 20
-                errorMessage = nil
-            }
-        } catch {
-            DispatchQueue.main.async {
-                errorMessage = "Haberler yenilenirken bir hata oluştu: \(error.localizedDescription)"
-            }
-        }
-    }
-}
-
-struct NewsItemView: View {
-    let item: NewsServiceImpl.NewsItem
-    @State private var showSafariView = false
-    
-    private let goldColor = Color(red: 0.984, green: 0.788, blue: 0.369)
-    
-    var body: some View {
-        Button(action: {
-            showSafariView = true
-        }) {
-            VStack(alignment: .leading, spacing: 12) {
-                // Resim ve kaynak
-                ZStack(alignment: .bottomLeading) {
-                    if let url = URL(string: item.imageUrl) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(height: 180)
-                                    .clipped()
-                            case .empty, .failure:
-                                Rectangle()
-                                    .fill(Color(UIColor.systemGray5))
-                                    .frame(height: 180)
-                                    .overlay(
-                                        Image(systemName: "newspaper.fill")
-                                            .resizable()
-                                            .scaledToFit()
-                                            .foregroundColor(goldColor)
-                                            .frame(width: 40, height: 40)
-                                    )
-                            @unknown default:
-                                EmptyView()
-                            }
-                        }
-                    } else {
-                        Rectangle()
-                            .fill(Color(UIColor.systemGray5))
-                            .frame(height: 180)
-                            .overlay(
-                                Image(systemName: "newspaper.fill")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .foregroundColor(goldColor)
-                                    .frame(width: 40, height: 40)
-                            )
-                    }
-                    
-                    // Kaynak etiketi
-                    Text(item.source)
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(goldColor)
-                        .cornerRadius(4)
-                        .padding(8)
-                }
-                .cornerRadius(10)
                 
-                // Başlık ve açıklama
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(item.title)
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .lineLimit(2)
-                    
-                    Text(item.description)
-                        .font(.subheadline)
-                        .foregroundColor(.gray)
-                        .lineLimit(3)
-                    
-                    // Tarih
-                    HStack {
-                        Spacer()
-                        Text(formatDate(item.publishedAt))
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    self?.isLoadingMore = false
+                    self?.hasMorePages = false
                 }
-                .padding(.horizontal, 4)
-            }
-            .padding(.vertical, 8)
-            .background(Color(UIColor.systemGray6).opacity(0.1))
-            .cornerRadius(12)
-        }
-        .buttonStyle(PlainButtonStyle())
-        .sheet(isPresented: $showSafariView) {
-            if let url = URL(string: item.url) {
-                CustomSafariView(url: url)
             }
         }
     }
     
-    private func formatDate(_ dateString: String) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
+    func refreshNews() {
+        isLoading = true
+        errorMessage = nil
         
-        guard let date = formatter.date(from: dateString) else {
-            return "Bilinmeyen tarih"
+        Task {
+            do {
+                let apiItems = try await APIService.shared.fetchNews()
+                
+                // Convert API model to our model
+                let newsItems = apiItems.map { apiItem in
+                    // Parse date
+                    let formatter = ISO8601DateFormatter()
+                    let date = formatter.date(from: apiItem.publishedAt) ?? Date()
+                    
+                    return NewsItem(
+                        id: apiItem.id,
+                        title: apiItem.title,
+                        description: apiItem.description,
+                        url: apiItem.url,
+                        imageUrl: apiItem.imageUrl,
+                        source: apiItem.source,
+                        publishedAt: date
+                    )
+                }
+                
+                DispatchQueue.main.async { [weak self] in
+                    self?.newsItems = newsItems
+                    self?.isLoading = false
+                    self?.currentPage = 1
+                    self?.hasMorePages = newsItems.count >= 20
+                    self?.errorMessage = nil
+                }
+                
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    self?.isLoading = false
+                    self?.errorMessage = "Haberler yenilenirken bir hata oluştu: \(error.localizedDescription)"
+                }
+            }
         }
-        
-        // Yayınlanma zamanını göster
-        let displayFormatter = DateFormatter()
-        displayFormatter.dateStyle = .medium
-        displayFormatter.timeStyle = .short
-        displayFormatter.locale = Locale(identifier: "tr_TR")
-        return displayFormatter.string(from: date)
+    }
+    
+    func getFormattedDate(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .full
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 
-struct NewsView_Previews: PreviewProvider {
-    static var previews: some View {
-        NewsView()
-            .preferredColorScheme(.dark)
-    }
+// MARK: - CryptoCompare Model
+struct CryptoCompareResponse: Codable {
+    let Data: [CryptoCompareNewsItem]
 }
 
+struct CryptoCompareNewsItem: Codable {
+    let id: String
+    let title: String
+    let body: String
+    let url: String
+    let imageurl: String
+    let source: String
+    let published_on: Int
+}
+
+// MARK: - SafariView
 struct CustomSafariView: UIViewControllerRepresentable {
     let url: URL
     
@@ -560,8 +309,214 @@ struct CustomSafariView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
-#Preview {
-    NewsView()
+// MARK: - Views
+struct NewsView: View {
+    @StateObject private var viewModel = NewsServiceImpl.shared
+    @State private var searchText = ""
+    @State private var selectedCategory: NewsCategory = .all
+    @State private var showSafariView = false
+    @State private var selectedURL = URL(string: "https://www.example.com")!
+    
+    private let goldColor = Color(red: 0.984, green: 0.788, blue: 0.369)
+    private let darkBackgroundColor = Color(red: 0.11, green: 0.11, blue: 0.118)
+    
+    var filteredNews: [NewsServiceImpl.NewsItem] {
+        if !searchText.isEmpty {
+            return viewModel.newsItems.filter { news in
+                news.title.lowercased().contains(searchText.lowercased()) ||
+                news.description.lowercased().contains(searchText.lowercased())
+            }
+        } else if selectedCategory != .all {
+            return viewModel.newsItems.filter { $0.matchesCategory(selectedCategory) }
+        } else {
+            return viewModel.newsItems
+        }
+    }
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                darkBackgroundColor.edgesIgnoringSafeArea(.all)
+                
+                VStack {
+                    if viewModel.isLoading && viewModel.newsItems.isEmpty {
+                        Spacer()
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: goldColor))
+                            .scaleEffect(1.5)
+                        Spacer()
+                    } else if let error = viewModel.errorMessage, viewModel.newsItems.isEmpty {
+                        Spacer()
+                        VStack(spacing: 20) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 50))
+                                .foregroundColor(goldColor)
+                            
+                            Text(error)
+                                .font(.headline)
+                                .multilineTextAlignment(.center)
+                                .foregroundColor(.white)
+                            
+                            Button(action: {
+                                viewModel.refreshNews()
+                            }) {
+                                Text("Tekrar Dene")
+                                    .font(.headline)
+                                    .foregroundColor(.black)
+                                    .padding()
+                                    .background(goldColor)
+                                    .cornerRadius(10)
+                            }
+                        }
+                        .padding()
+                        Spacer()
+                    } else {
+                        // Category Tabs
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(NewsCategory.allCases) { category in
+                                    CategoryTab(category: category, selectedCategory: $selectedCategory)
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        .padding(.vertical, 5)
+                        
+                        // News List
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(filteredNews) { newsItem in
+                                    NewsItemView(item: newsItem)
+                                        .padding(.horizontal)
+                                        .padding(.vertical, 5)
+                                        .onTapGesture {
+                                            selectedURL = URL(string: newsItem.url) ?? URL(string: "https://www.example.com")!
+                                            showSafariView = true
+                                        }
+                                    
+                                    Divider()
+                                        .background(Color.gray.opacity(0.3))
+                                        .padding(.horizontal)
+                                }
+                                
+                                if viewModel.isLoadingMore {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: goldColor))
+                                        .frame(width: 50, height: 50)
+                                        .padding()
+                                } else if viewModel.hasMorePages {
+                                    Button(action: {
+                                        viewModel.loadMoreNews()
+                                    }) {
+                                        Text("Daha Fazla Yükle")
+                                            .foregroundColor(goldColor)
+                                            .padding()
+                                    }
+                                }
+                            }
+                        }
+                        .refreshable {
+                            await refreshData()
+                        }
+                    }
+                }
+                .searchable(text: $searchText, prompt: "Ara")
+                .onChange(of: searchText) { _ in
+                    // Auto-filter happens via computed property
+                }
+            }
+            .navigationTitle("Haberler")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                if viewModel.newsItems.isEmpty {
+                    viewModel.refreshNews()
+                }
+            }
+            .sheet(isPresented: $showSafariView) {
+                CustomSafariView(url: selectedURL)
+            }
+        }
+    }
+    
+    private func refreshData() async {
+        viewModel.refreshNews()
+    }
+}
+
+struct CategoryTab: View {
+    let category: NewsCategory
+    @Binding var selectedCategory: NewsCategory
+    
+    private let goldColor = Color(red: 0.984, green: 0.788, blue: 0.369)
+    
+    var body: some View {
+        Button(action: {
+            selectedCategory = category
+        }) {
+            Text(category.rawValue)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(selectedCategory == category ? goldColor : Color.gray.opacity(0.2))
+                )
+                .foregroundColor(selectedCategory == category ? .black : .white)
+        }
+    }
+}
+
+struct NewsItemView: View {
+    let item: NewsServiceImpl.NewsItem
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Title and source
+            HStack {
+                Text(item.title)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .lineLimit(2)
+                Spacer()
+            }
+            
+            HStack {
+                // Description
+                Text(item.description)
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .lineLimit(2)
+                Spacer()
+            }
+            
+            HStack {
+                // Source & Time
+                Text(item.source)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                
+                Text("•")
+                    .foregroundColor(.gray)
+                
+                Text(NewsServiceImpl.shared.getFormattedDate(item.publishedAt))
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                
+                Spacer()
+                
+                // Read More
+                Text("Daha Fazla")
+                    .font(.caption)
+                    .foregroundColor(Color(red: 0.984, green: 0.788, blue: 0.369))
+            }
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+struct NewsView_Previews: PreviewProvider {
+    static var previews: some View {
+        NewsView()
+    }
 } 
 
 
