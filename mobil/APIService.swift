@@ -30,7 +30,7 @@ actor CoinIDTracker {
     }
 }
 
-class APIService: Equatable {
+class APIService: ObservableObject, Equatable {
     static let shared = APIService()
     
     // Actor kullanarak thread-safe yap
