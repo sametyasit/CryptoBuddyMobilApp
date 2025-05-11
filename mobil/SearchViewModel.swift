@@ -146,23 +146,39 @@ class SearchViewModel: ObservableObject {
     }
     
     private func handleError(_ error: Error) {
-        if let apiError = error as? APIError{
+        errorMessage = checkErrorType(error)
+    }
+    
+    private func checkErrorType(_ error: Error) -> String {
+        // APIService'ten APIError kullanımı
+        if let apiError = error as? APIService.APIError {
             switch apiError {
-          
-            default:
-                errorMessage = "Veri yüklenirken bir sorun oluştu. Lütfen tekrar deneyin."
+            case .invalidURL:
+                return "Geçersiz URL"
+            case .invalidResponse:
+                return "Sunucu yanıtı geçersiz"
+            case .decodingError:
+                return "Veri çözümlenirken hata oluştu"
+            case .allAPIsFailed:
+                return "Tüm API servisleri başarısız oldu"
+            case .coinNotFound:
+                return "Coin bulunamadı"
+            case .rateLimitExceeded:
+                return "API kullanım limiti aşıldı"
+            case .invalidData:
+                return "Veri geçersiz"
             }
         } else if let urlError = error as? URLError {
             switch urlError.code {
             case .notConnectedToInternet:
-                errorMessage = "İnternet bağlantısı yok."
+                return "İnternet bağlantısı bulunamadı"
             case .timedOut:
-                errorMessage = "Bağlantı zaman aşımına uğradı."
+                return "Bağlantı zaman aşımına uğradı"
             default:
-                errorMessage = "Ağ hatası: \(urlError.localizedDescription)"
+                return "Ağ hatası: \(urlError.localizedDescription)"
             }
         } else {
-            errorMessage = "Bir hata oluştu: \(error.localizedDescription)"
+            return error.localizedDescription
         }
     }
     
