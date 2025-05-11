@@ -257,342 +257,300 @@ final class NewsViewModel: ObservableObject {
 
 // MARK: - Views
 struct NewsView: View {
-    @StateObject private var viewModel = NewsViewModel()
-    @State private var showingSafari = false
-    @State private var selectedNewsURL: URL?
-    @State private var showError = false
-    @State private var showingNewsDetail = false
-    @State private var selectedNews: NewsServiceImpl.NewsItem?
+    @State private var newsItems: [NewsServiceImpl.NewsItem] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String? = nil
+    @State private var currentPage = 1
+    @State private var isLoadingMore = false
+    @State private var hasMorePages = true
+    
+    private let goldColor = Color(red: 0.984, green: 0.788, blue: 0.369)
     
     var body: some View {
         NavigationView {
             ZStack {
                 Color.black.edgesIgnoringSafeArea(.all)
                 
-                VStack(spacing: 0) {
-                    // Kategori seçici
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(NewsServiceImpl.NewsCategory.allCases, id: \.self) { category in
-                                CategoryButton(
-                                    title: category.rawValue,
-                                    isSelected: viewModel.selectedCategory == category
-                                ) {
-                                    viewModel.selectCategory(category)
+                VStack {
+                    if isLoading && newsItems.isEmpty {
+                        Spacer()
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: goldColor))
+                            .scaleEffect(1.5)
+                        Spacer()
+                    } else if let error = errorMessage, newsItems.isEmpty {
+                        Spacer()
+                        VStack(spacing: 20) {
+                            Image(systemName: "newspaper.fill")
+                                .font(.system(size: 60))
+                                .foregroundColor(goldColor)
+                            
+                            Text("Haberler yüklenemedi")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                            
+                            Text(error)
+                                .foregroundColor(.gray)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                            
+                            Button(action: {
+                                loadNews()
+                            }) {
+                                Text("Yeniden Dene")
+                                    .fontWeight(.medium)
+                                    .padding()
+                                    .frame(width: 150)
+                                    .background(goldColor)
+                                    .foregroundColor(.black)
+                                    .cornerRadius(10)
+                            }
+                        }
+                        .padding()
+                        Spacer()
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 0) {
+                                ForEach(newsItems) { newsItem in
+                                    NewsItemView(item: newsItem)
+                                        .padding(.horizontal)
+                                        .padding(.vertical, 8)
+                                }
+                                
+                                if isLoadingMore {
+                                    HStack {
+                                        Spacer()
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: goldColor))
+                                        Spacer()
+                                    }
+                                    .padding()
+                                } else if hasMorePages {
+                                    Button(action: {
+                                        loadMoreNews()
+                                    }) {
+                                        Text("Daha Fazla Göster")
+                                            .foregroundColor(goldColor)
+                                            .padding()
+                                            .frame(maxWidth: .infinity)
+                                            .background(Color(UIColor.systemGray6).opacity(0.2))
+                                            .cornerRadius(10)
+                                    }
+                                    .padding()
                                 }
                             }
                         }
-                        .padding(.horizontal)
-                        .padding(.vertical, 8)
-                    }
-                    
-                    // Arama çubuğu
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
-                        
-                        TextField("Search news...", text: Binding(
-                            get: { viewModel.searchText },
-                            set: { viewModel.updateSearchText($0) }
-                        ))
-                        .textFieldStyle(PlainTextFieldStyle())
-                        .foregroundColor(.white)
-                        
-                        if !viewModel.searchText.isEmpty {
-                            Button(action: {
-                                viewModel.updateSearchText("")
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.gray)
-                            }
+                        .refreshable {
+                            await refreshNews()
                         }
-                    }
-                    .padding()
-                    .background(Color(UIColor.darkGray).opacity(0.3))
-                    .cornerRadius(15)
-                    .padding(.horizontal)
-                    
-                    // Haber listesi
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
-                            ForEach(viewModel.filteredNews) { news in
-                                NewsCard(news: news)
-                                    .onTapGesture {
-                                        selectedNews = news
-                                        showingNewsDetail = true
-                                    }
-                                    .onAppear {
-                                        if news == viewModel.filteredNews.last {
-                                            Task {
-                                                await viewModel.loadMoreNews()
-                                            }
-                                        }
-                                    }
-                            }
-                            
-                            if viewModel.isLoadingMore {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
-                                    .padding()
-                            }
-                        }
-                        .padding()
                     }
                 }
             }
-            .navigationTitle("News")
+            .navigationTitle("Haberler")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showingNewsDetail) {
-                if let news = selectedNews {
-                    NewsDetailView(news: news)
-                }
-            }
-            .overlay {
-                if viewModel.isLoading {
-                    Spacer()
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
-                        .scaleEffect(1.5)
-                    Spacer()
-                } else {
-                    // ... existing code ...
-                }
-            }
             .onAppear {
-                Task {
-                    await viewModel.fetchNews()
-                }
-                viewModel.startAutoRefresh()
-            }
-            .onDisappear {
-                viewModel.stopAutoRefresh()
-            }
-            .alert("Error", isPresented: $showError) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                if let error = viewModel.error {
-                    Text(error.localizedDescription)
+                if newsItems.isEmpty {
+                    loadNews()
                 }
             }
         }
     }
-}
-
-struct NewsCard: View {
-    let news: NewsServiceImpl.NewsItem
     
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Haber görseli
-            AsyncImage(url: URL(string: news.imageUrl)) { phase in
-                switch phase {
-                case .empty:
-                    Rectangle()
-                        .fill(Color(UIColor.darkGray).opacity(0.3))
-                        .frame(height: 200)
-                        .overlay(
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
-                        )
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(height: 200)
-                        .clipped()
-                case .failure:
-                    Rectangle()
-                        .fill(Color(UIColor.darkGray).opacity(0.3))
-                        .frame(height: 200)
-                        .overlay(
-                            Image(systemName: "photo")
-                                .font(.system(size: 40))
-                                .foregroundColor(AppColorsTheme.gold)
-                        )
-                @unknown default:
-                    EmptyView()
+    private func loadNews() {
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                let items = try await APIService.shared.fetchNews()
+                DispatchQueue.main.async {
+                    self.newsItems = items
+                    self.isLoading = false
+                    self.currentPage = 1
+                    self.hasMorePages = items.count >= 20
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                    self.errorMessage = "Haber verilerini yüklerken bir hata oluştu: \(error.localizedDescription)"
                 }
             }
-            .cornerRadius(16)
-            
-            // Haber başlığı
-            Text(news.title)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.white)
-                .lineLimit(2)
-            
-            // Haber açıklaması
-            Text(news.description)
-                .font(.system(size: 14))
-                .foregroundColor(.gray)
-                .lineLimit(3)
-            
-            HStack {
-                // Kaynak ve tarih
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(news.source)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(AppColorsTheme.gold)
+        }
+    }
+    
+    private func loadMoreNews() {
+        guard !isLoadingMore && hasMorePages else { return }
+        
+        isLoadingMore = true
+        
+        Task {
+            do {
+                let items = try await APIService.shared.fetchNews()
+                
+                DispatchQueue.main.async {
+                    isLoadingMore = false
                     
-                    Text(news.publishedAt, style: .relative)
-                        .font(.system(size: 12))
-                        .foregroundColor(.gray)
-                }
-                
-                Spacer()
-                
-                // Kategori etiketi
-                Text(news.category.rawValue)
-                    .font(.system(size: 12, weight: .medium))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(AppColorsTheme.gold.opacity(0.2))
-                    .foregroundColor(AppColorsTheme.gold)
-                    .cornerRadius(8)
-            }
-        }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color(UIColor.darkGray).opacity(0.3))
-        )
-    }
-}
-
-struct NewsDetailView: View {
-    let news: NewsServiceImpl.NewsItem
-    @Environment(\.presentationMode) var presentationMode
-    @State private var showingSafari = false
-    
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    // Haber görseli
-                    AsyncImage(url: URL(string: news.imageUrl)) { phase in
-                        switch phase {
-                        case .empty:
-                            Rectangle()
-                                .fill(Color(UIColor.darkGray).opacity(0.3))
-                                .frame(height: 250)
-                                .overlay(
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
-                                )
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(height: 250)
-                                .clipped()
-                        case .failure:
-                            Rectangle()
-                                .fill(Color(UIColor.darkGray).opacity(0.3))
-                                .frame(height: 250)
-                                .overlay(
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 50))
-                                        .foregroundColor(AppColorsTheme.gold)
-                                )
-                        @unknown default:
-                            EmptyView()
-                        }
+                    // Filter out duplicates
+                    let existingIds = Set(newsItems.map { $0.id })
+                    let newItems = items.filter { !existingIds.contains($0.id) }
+                    
+                    if !newItems.isEmpty {
+                        newsItems.append(contentsOf: newItems)
+                        currentPage += 1
                     }
-                    .cornerRadius(16)
                     
-                    // Haber başlığı
-                    Text(news.title)
-                        .font(.system(size: 24, weight: .bold))
+                    hasMorePages = newItems.count >= 10
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    isLoadingMore = false
+                    hasMorePages = false
+                }
+            }
+        }
+    }
+    
+    private func refreshNews() async {
+        do {
+            let items = try await APIService.shared.fetchNews()
+            
+            DispatchQueue.main.async {
+                newsItems = items
+                currentPage = 1
+                hasMorePages = items.count >= 20
+                errorMessage = nil
+            }
+        } catch {
+            DispatchQueue.main.async {
+                errorMessage = "Haberler yenilenirken bir hata oluştu: \(error.localizedDescription)"
+            }
+        }
+    }
+}
+
+struct NewsItemView: View {
+    let item: NewsServiceImpl.NewsItem
+    @State private var showSafariView = false
+    
+    private let goldColor = Color(red: 0.984, green: 0.788, blue: 0.369)
+    
+    var body: some View {
+        Button(action: {
+            showSafariView = true
+        }) {
+            VStack(alignment: .leading, spacing: 12) {
+                // Resim ve kaynak
+                ZStack(alignment: .bottomLeading) {
+                    if let url = URL(string: item.imageUrl) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(height: 180)
+                                    .clipped()
+                            case .empty, .failure:
+                                Rectangle()
+                                    .fill(Color(UIColor.systemGray5))
+                                    .frame(height: 180)
+                                    .overlay(
+                                        Image(systemName: "newspaper.fill")
+                                            .resizable()
+                                            .scaledToFit()
+                                            .foregroundColor(goldColor)
+                                            .frame(width: 40, height: 40)
+                                    )
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                    } else {
+                        Rectangle()
+                            .fill(Color(UIColor.systemGray5))
+                            .frame(height: 180)
+                            .overlay(
+                                Image(systemName: "newspaper.fill")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .foregroundColor(goldColor)
+                                    .frame(width: 40, height: 40)
+                            )
+                    }
+                    
+                    // Kaynak etiketi
+                    Text(item.source)
+                        .font(.caption)
+                        .fontWeight(.bold)
                         .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(goldColor)
+                        .cornerRadius(4)
+                        .padding(8)
+                }
+                .cornerRadius(10)
+                
+                // Başlık ve açıklama
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(item.title)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .lineLimit(2)
                     
-                    // Kaynak ve tarih
+                    Text(item.description)
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .lineLimit(3)
+                    
+                    // Tarih
                     HStack {
-                        Text(news.source)
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(AppColorsTheme.gold)
-                        
                         Spacer()
-                        
-                        Text(news.publishedAt, style: .relative)
-                            .font(.system(size: 14))
+                        Text(formatDate(item.publishedAt))
+                            .font(.caption)
                             .foregroundColor(.gray)
                     }
-                    
-                    // Kategori etiketi
-                    Text(news.category.rawValue)
-                        .font(.system(size: 14, weight: .medium))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(AppColorsTheme.gold.opacity(0.2))
-                        .foregroundColor(AppColorsTheme.gold)
-                        .cornerRadius(8)
-                    
-                    // Haber açıklaması
-                    Text(news.description)
-                        .font(.system(size: 16))
-                        .foregroundColor(.white)
-                        .lineSpacing(8)
-                    
-                    // Haber linki
-                    Button(action: {
-                        showingSafari = true
-                    }) {
-                        HStack {
-                            Text("Read Full Article")
-                                .font(.system(size: 16, weight: .medium))
-                            Image(systemName: "arrow.up.right")
-                        }
-                        .foregroundColor(AppColorsTheme.gold)
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(AppColorsTheme.gold.opacity(0.1))
-                        )
-                    }
                 }
-                .padding()
+                .padding(.horizontal, 4)
             }
-            .background(Color.black.edgesIgnoringSafeArea(.all))
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(
-                leading: Button(action: {
-                    presentationMode.wrappedValue.dismiss()
-                }) {
-                    Image(systemName: "xmark")
-                        .foregroundColor(.white)
-                }
-            )
-            .sheet(isPresented: $showingSafari) {
-                if let url = URL(string: news.url) {
-                    SafariView(url: url)
-                }
+            .padding(.vertical, 8)
+            .background(Color(UIColor.systemGray6).opacity(0.1))
+            .cornerRadius(12)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .sheet(isPresented: $showSafariView) {
+            if let url = URL(string: item.url) {
+                CustomSafariView(url: url)
             }
         }
     }
-}
-
-struct CategoryButton: View {
-    let title: String
-    let isSelected: Bool
-    let action: () -> Void
     
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, weight: .medium))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(isSelected ? AppColorsTheme.gold : Color(UIColor.darkGray).opacity(0.3))
-                )
-                .foregroundColor(isSelected ? .black : .white)
+    private func formatDate(_ dateString: String) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
+        
+        guard let date = formatter.date(from: dateString) else {
+            return "Bilinmeyen tarih"
         }
+        
+        // Yayınlanma zamanını göster
+        let displayFormatter = DateFormatter()
+        displayFormatter.dateStyle = .medium
+        displayFormatter.timeStyle = .short
+        displayFormatter.locale = Locale(identifier: "tr_TR")
+        return displayFormatter.string(from: date)
     }
 }
 
-struct SafariView: UIViewControllerRepresentable {
+struct NewsView_Previews: PreviewProvider {
+    static var previews: some View {
+        NewsView()
+            .preferredColorScheme(.dark)
+    }
+}
+
+struct CustomSafariView: UIViewControllerRepresentable {
     let url: URL
     
     func makeUIViewController(context: Context) -> SFSafariViewController {
