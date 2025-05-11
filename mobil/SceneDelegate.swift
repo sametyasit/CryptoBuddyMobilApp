@@ -19,10 +19,24 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // This delegate does not imply the connecting scene or session are new (see `application:configurationForConnectingSceneSession` instead).
         guard let windowScene = (scene as? UIWindowScene) else { return }
         
+        // Create environment objects
+        let networkMonitor = NetworkMonitorViewModel()
+      
+        // Configure APIService with the network monitor
+        APIService.shared.configure(with: networkMonitor)
+        
+        // Create the SwiftUI view that provides the window contents.
+        let contentView = ContentView()
+            .environmentObject(networkMonitor)
+           
+            .environmentObject(APIService.shared)
+            .preferredColorScheme(.dark)
+
+        // Use a UIHostingController as window root view controller.
         let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = UIHostingController(rootView: MainTabView())
-        window.makeKeyAndVisible()
+        window.rootViewController = UIHostingController(rootView: contentView)
         self.window = window
+        window.makeKeyAndVisible()
     }
 
     func sceneDidDisconnect(_ scene: UIScene) {
