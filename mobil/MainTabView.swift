@@ -5,18 +5,7 @@ import Charts
 import UIKit
 import SafariServices
 
-// MARK: - Custom SafariView
-struct CustomSafariView: UIViewControllerRepresentable {
-    let url: URL
-    
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        return SFSafariViewController(url: url)
-    }
-    
-    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
-}
-
-// SearchViewModel modelini ekleyelim
+// MARK: - SearchViewModel modelini ekleyelim
 class SearchViewModelLight: ObservableObject, @unchecked Sendable {
     @Published var searchText = ""
     @Published var isLoading = false
