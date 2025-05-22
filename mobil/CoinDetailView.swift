@@ -539,8 +539,9 @@ struct NewsListView: View {
     let coinSymbol: String
     let onNewsSelect: (String) -> Void
     
-    @State private var news: [APIService.APINewsItem] = []
+    @State private var news: [APIService.NewsItem] = []
     @State private var isLoading = true
+    @State private var errorMessage: String? = nil
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -550,21 +551,164 @@ struct NewsListView: View {
                 .padding(.bottom, 5)
             
             if isLoading {
-                HStack {
+                VStack {
                     Spacer()
                     ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
+                    Text("Haberler yükleniyor...")
+                        .foregroundColor(.gray)
+                        .font(.caption)
+                        .padding(.top, 5)
+                    Spacer()
                 }
+                .frame(height: 120)
+            } else if let error = errorMessage {
+                VStack {
+                    Spacer()
+                    Text("Haber yüklenemedi")
+                        .foregroundColor(.white)
+                    Text(error)
+                        .foregroundColor(.gray)
+                        .font(.caption)
+                    Button("Tekrar Dene") {
+                        loadNews()
+                    }
+                    .padding(.top, 5)
+                    Spacer()
+                }
+                .frame(height: 120)
+            } else if news.isEmpty {
+                VStack {
+                    Spacer()
+                    Text("İlgili haber bulunamadı")
+                        .foregroundColor(.gray)
+                    Spacer()
+                }
+                .frame(height: 120)
             } else {
-                List(news) { newsItem in
-                    Button(action: {
-                        onNewsSelect(newsItem.url)
-                    }) {
-                        Text(newsItem.title)
-                            .foregroundColor(.white)
+                // İlgili haberleri göster
+                VStack(spacing: 12) {
+                    ForEach(filteredNews) { newsItem in
+                        NewsItemRow(newsItem: newsItem, onTap: {
+                            onNewsSelect(newsItem.url)
+                        })
                     }
                 }
             }
         }
+        .padding()
+        .background(Color(UIColor.darkGray).opacity(0.3))
+        .cornerRadius(15)
+        .onAppear {
+            loadNews()
+        }
+    }
+    
+    // Coinle ilgili haberleri filtrele
+    private var filteredNews: [APIService.NewsItem] {
+        let keywords = [coinName.lowercased(), coinSymbol.lowercased()]
+        return news.filter { item in
+            let content = item.title.lowercased() + " " + item.description.lowercased()
+            return keywords.contains { keyword in
+                content.contains(keyword)
+            }
+        }
+    }
+    
+    // Haberleri yükle
+    private func loadNews() {
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                // Kripto haberleri API'sini kullan
+                let allNews = try await APIService.shared.fetchCryptoNews()
+                
+                await MainActor.run {
+                    self.news = allNews
+                    self.isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = error.localizedDescription
+                    self.isLoading = false
+                }
+            }
+        }
+    }
+}
+
+// Haber öğesi satırı
+struct NewsItemRow: View {
+    let newsItem: APIService.NewsItem
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(alignment: .top, spacing: 12) {
+                // Haber resmi
+                AsyncImage(url: URL(string: newsItem.imageUrl)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 80, height: 80)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    case .empty, .failure:
+                        Image(systemName: "newspaper.fill")
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(width: 40, height: 40)
+                            .foregroundColor(AppColorsTheme.gold)
+                            .frame(width: 80, height: 80)
+                            .background(Color(UIColor.systemGray5).opacity(0.3))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+                .frame(width: 80, height: 80)
+                
+                // Haber bilgileri
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(newsItem.title)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .lineLimit(2)
+                    
+                    Text(newsItem.description)
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                        .lineLimit(2)
+                    
+                    HStack {
+                        Text(newsItem.source)
+                            .font(.caption)
+                            .foregroundColor(AppColorsTheme.gold)
+                        
+                        Spacer()
+                        
+                        if let date = ISO8601DateFormatter().date(from: newsItem.publishedAt) {
+                            Text(dateFormatter.string(from: date))
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+            }
+            .padding()
+            .background(Color(UIColor.systemGray6).opacity(0.2))
+            .cornerRadius(10)
+        }
+    }
+    
+    private var dateFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
     }
 }
 
