@@ -419,7 +419,7 @@ struct LoginViewSimple: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
+                Color.black.ignoresSafeArea()
                 
                 VStack {
                     Text("Giriş Yap")
@@ -505,12 +505,12 @@ struct SearchView: View {
     @State private var showingCoinDetail = false
     @State private var selectedCoinID = ""
     @State private var showingNewsDetail = false
-    @State private var selectedNewsURL = URL(string: "https://example.com")!
+    @State private var selectedNewsURL: URL? = URL(string: "https://example.com")
     
     var body: some View {
         NavigationView {
             ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
+                Color.black.ignoresSafeArea()
                 
                 VStack(spacing: 20) {
                     // Arama Çubuğu
@@ -720,8 +720,13 @@ struct SearchView: View {
                 CoinDetailView(coinId: selectedCoinID)
             }
             .sheet(isPresented: $showingNewsDetail) {
-                CustomSafariView(url: selectedNewsURL)
-                    .edgesIgnoringSafeArea(.all)
+                Button("Safari'de Aç") {
+                    if let url = selectedNewsURL {
+                        UIApplication.shared.open(url)
+                    }
+                    showingNewsDetail = false
+                }
+                .padding()
             }
         }
     }
@@ -919,7 +924,7 @@ struct CoinDetailView: View {
     @State private var coinNews: [NewsItem] = []
     @State private var isLoading = true
     @State private var showingSafari = false
-    @State private var selectedNewsURL = URL(string: "https://example.com")!
+    @State private var selectedNewsURL: URL? = URL(string: "https://example.com")
     @State private var errorMessage: String? = nil
     @State private var selectedChartPeriod: ChartPeriod = .week
     @State private var retryCount = 0
@@ -1017,8 +1022,13 @@ struct CoinDetailView: View {
             isAppearing = false
         }
         .sheet(isPresented: $showingSafari) {
-            CustomSafariView(url: selectedNewsURL)
-                .ignoresSafeArea()
+            Button("Safari'de Aç") {
+                if let url = selectedNewsURL {
+                    UIApplication.shared.open(url)
+                }
+                showingSafari = false
+            }
+            .padding()
         }
     }
     
@@ -1848,7 +1858,7 @@ struct CommunityView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
+                Color.black.ignoresSafeArea()
                 
                 VStack {
                     Text("Community View")
