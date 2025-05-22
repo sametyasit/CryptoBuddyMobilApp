@@ -7,7 +7,7 @@ struct CoinDetailView: View {
     @State private var coin: Coin?
     @State private var isLoading = true
     @State private var errorMessage: String? = nil
-    @State private var selectedNewsURL = URL(string: "https://example.com")!
+    @State private var selectedNewsURL: URL? = URL(string: "https://example.com")
     @State private var showingSafari = false
     @State private var graphData: [GraphPoint] = []
     @State private var selectedTimeFrame: TimeFrame = .week
@@ -266,7 +266,13 @@ struct CoinDetailView: View {
             loadCoinData()
         }
         .sheet(isPresented: $showingSafari) {
-            SafariView(url: selectedNewsURL)
+            Button("Safari'de Aç") {
+                if let url = selectedNewsURL {
+                    UIApplication.shared.open(url)
+                }
+                showingSafari = false
+            }
+            .padding()
         }
     }
     
