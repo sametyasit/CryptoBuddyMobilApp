@@ -46,6 +46,18 @@ class APIService: ObservableObject, Equatable {
     private let coinAPIKey = "16ebef28-ab58-42bf-a94b-5261121aab9c"
     private let cryptoAPIsKey = "b7995dc6681220bcc35601665acf8166cd72d06d"
     
+    // API Constants
+    private struct APIConstants {
+        // Gerçek API anahtarı
+        static let cryptocompareApiKey = "3c9dad9b6bec7b75c76f7f0abf6e4ec23fad1ea22bad1387d8b25b10a0da0d0b"
+        // Free Crypto APIs News
+        static let cryptoControlApiKey = "c00fb7a30a22a7b3c01bfc8bf11046e1"
+        // Yeni eklenen gerçek API anahtarı
+        static let newsApiKey = "bce28a0e51434ab2b9e45d5ba66a1c0c"
+        // Önbellek süresi - daha az
+        static let newsRefreshInterval: TimeInterval = 60 // 1 dakika (test için)
+    }
+    
     // Environment Object
     private var networkMonitor: NetworkMonitorViewModel?
     
@@ -454,73 +466,223 @@ class APIService: ObservableObject, Equatable {
     
     // MARK: - News Methods
     
-    @Sendable
-    func fetchNews() async throws -> [APINewsItem] {
-        // Haberler için CryptoNews API, CryptoCompare API, CoinDesk RSS kullanacağız
-        print("📰 Kripto haberleri alınıyor...")
+    // NewsItem modelini sınıf içine taşıyorum
+    struct NewsItem: Identifiable, Codable, Comparable {
+        let id: String
+        let title: String
+        let description: String
+        let url: String
+        let imageUrl: String
+        let source: String
+        let publishedAt: String
         
-        // Haberleri önbellekten kontrol et ve gerekirse yenile
-        if let cachedNews = checkNewsCache() {
-            print("✅ Önbellekten haberler alındı")
+        static func < (lhs: NewsItem, rhs: NewsItem) -> Bool {
+            return lhs.publishedAt > rhs.publishedAt
+        }
+        
+        static func == (lhs: NewsItem, rhs: NewsItem) -> Bool {
+            return lhs.id == rhs.id
+        }
+    }
+    
+    // Alternatif haber kaynakları
+    enum NewsSource {
+        case cryptocompare
+        case gnews
+        case newsapi
+        case coindesk
+        case cryptocontrol
+        case blockchain
+        case backup
+    }
+    
+    // Haber kaynağı başarım durumu
+    struct NewsSourceResult {
+        let source: NewsSource
+        let items: [NewsItem]
+        let success: Bool
+    }
+    
+    // Haberleri çekmek için ana metod - birden fazla kaynak dener
+    func fetchCryptoNews() async throws -> [NewsItem] {
+        print("📰 Gerçek kripto para haberleri alınıyor...")
+        
+        // Son güncellemeden beri 5 dakika geçmişse önbellekten al
+        let lastNewsFetchTime = UserDefaults.standard.object(forKey: "lastNewsFetchTime") as? Date
+        let currentTime = Date()
+        
+        if let lastFetch = lastNewsFetchTime, 
+           currentTime.timeIntervalSince(lastFetch) < APIConstants.newsRefreshInterval,
+           let cachedNews = loadCachedNews(), !cachedNews.isEmpty {
+            print("✅ Önbellekten \(cachedNews.count) haber yüklendi")
             return cachedNews
         }
         
-        // API'leri sırayla dene
-        var newsItems: [APINewsItem] = []
+        var allResults: [NewsSourceResult] = []
         
-        // 1. Cryptocurrency News API'si (Örnek: CryptoControl, NewsAPI, vb.)
+        // 1. NewsAPI.org - Gerçek Kripto Haberleri (En güvenilir kaynak)
         do {
-            // NewsAPI.org API'sinden kripto ile ilgili haberleri al
-            let endpoint = "https://newsapi.org/v2/everything?q=cryptocurrency%20OR%20bitcoin%20OR%20ethereum&sortBy=publishedAt&language=en&pageSize=15"
+            print("🔍 NewsAPI.org kripto haberleri alınıyor...")
+            let news = try await fetchNewsAPI()
+            allResults.append(NewsSourceResult(source: .newsapi, items: news, success: !news.isEmpty))
             
-            guard let url = URL(string: endpoint) else {
-                throw APIError.invalidURL
+            if !news.isEmpty {
+                print("✅ NewsAPI.org'dan \(news.count) gerçek haber başarıyla alındı")
+                cacheCryptoNews(news)
+                UserDefaults.standard.set(currentTime, forKey: "lastNewsFetchTime")
+                return news
             }
+        } catch {
+            print("⚠️ NewsAPI.org hata: \(error.localizedDescription)")
+            allResults.append(NewsSourceResult(source: .newsapi, items: [], success: false))
+        }
+        
+        // 2. CryptoControl API - Gerçek Kripto haberleri
+        do {
+            print("🔍 CryptoControl haberleri alınıyor...")
+            let news = try await fetchCryptoControlNews()
+            allResults.append(NewsSourceResult(source: .cryptocontrol, items: news, success: !news.isEmpty))
             
-            var request = URLRequest(url: url)
-            request.httpMethod = "GET"
-            request.addValue("bce28a0e51434ab2b9e45d5ba66a1c0c", forHTTPHeaderField: "X-Api-Key") // Örnek API key
-            
-            let (data, response) = try await URLSession.shared.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse, 
-                  (200...299).contains(httpResponse.statusCode) else {
-                print("⚠️ NewsAPI hata kodu: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
-                throw APIError.invalidResponse
+            if !news.isEmpty {
+                print("✅ CryptoControl'dan \(news.count) gerçek haber başarıyla alındı")
+                cacheCryptoNews(news)
+                UserDefaults.standard.set(currentTime, forKey: "lastNewsFetchTime")
+                return news
             }
+        } catch {
+            print("⚠️ CryptoControl hata: \(error.localizedDescription)")
+            allResults.append(NewsSourceResult(source: .cryptocontrol, items: [], success: false))
+        }
+        
+        // 3. CryptoCompare API - En yaygın kripto haber kaynağı
+        do {
+            print("🔍 CryptoCompare haberleri alınıyor...")
+            let news = try await fetchCryptoCompareNews()
+            allResults.append(NewsSourceResult(source: .cryptocompare, items: news, success: !news.isEmpty))
             
-            // JSON parsing
-            let decoder = JSONDecoder()
+            if !news.isEmpty {
+                print("✅ CryptoCompare'den \(news.count) gerçek haber başarıyla alındı")
+                cacheCryptoNews(news)
+                UserDefaults.standard.set(currentTime, forKey: "lastNewsFetchTime")
+                return news
+            }
+        } catch {
+            print("⚠️ CryptoCompare hata: \(error.localizedDescription)")
+            allResults.append(NewsSourceResult(source: .cryptocompare, items: [], success: false))
+        }
+        
+        // 4. CoinDesk API - Popüler kripto haber sitesi
+        do {
+            print("🔍 CoinDesk haberlerini almaya çalışıyorum...")
+            let news = try await fetchCoinDeskNews()
+            allResults.append(NewsSourceResult(source: .coindesk, items: news, success: !news.isEmpty))
             
-            // NewsAPI yanıt yapısı
-            struct NewsAPIResponse: Codable {
-                let status: String
-                let totalResults: Int
-                let articles: [Article]
-                
-                struct Article: Codable {
-                    let source: Source
-                    let author: String?
-                    let title: String
-                    let description: String?
-                    let url: String
-                    let urlToImage: String?
-                    let publishedAt: String
-                    let content: String?
-                    
-                    struct Source: Codable {
-                        let id: String?
-                        let name: String
-                    }
+            if !news.isEmpty {
+                print("✅ CoinDesk'ten \(news.count) gerçek haber başarıyla alındı")
+                cacheCryptoNews(news)
+                UserDefaults.standard.set(currentTime, forKey: "lastNewsFetchTime")
+                return news
+            }
+        } catch {
+            print("⚠️ CoinDesk hata: \(error.localizedDescription)")
+            allResults.append(NewsSourceResult(source: .coindesk, items: [], success: false))
+        }
+        
+        // Tüm API'ler başarısız oldu ve haberlere ulaşamadık - Blockchain.com haberlerini deneyelim
+        do {
+            print("🔍 Blockchain.com haberleri alınıyor (son deneme)...")
+            let news = try await fetchBlockchainNews()
+            
+            if !news.isEmpty {
+                print("✅ Blockchain.com'dan \(news.count) gerçek haber başarıyla alındı")
+                cacheCryptoNews(news)
+                UserDefaults.standard.set(currentTime, forKey: "lastNewsFetchTime")
+                return news
+            }
+        } catch {
+            print("⚠️ Blockchain.com hata: \(error.localizedDescription)")
+        }
+        
+        // Gerçek haber kaynakları tükendiğinde hata dönelim
+        print("❌ Hiçbir haber kaynağına ulaşılamadı. Lütfen internet bağlantınızı kontrol edin.")
+        throw APIError.allAPIsFailed
+    }
+    
+    // NewsAPI.org'dan haber alma (yüksek kaliteli kaynak)
+    func fetchNewsAPI() async throws -> [NewsItem] {
+        print("📰 NewsAPI.org'dan kripto haberleri alınıyor...")
+        
+        // NewsAPI.org için API anahtarı ve URL
+        let apiKey = APIConstants.newsApiKey
+        
+        // NewsAPI.org güvenilir finansal haberler için iyi bir kaynak
+        let urlString = "https://newsapi.org/v2/everything?q=cryptocurrency+OR+bitcoin+OR+blockchain&sortBy=publishedAt&language=en&pageSize=15&apiKey=\(apiKey)"
+        
+        guard let url = URL(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            if let httpResponse = response as? HTTPURLResponse {
+                print("⚠️ NewsAPI hata kodu: \(httpResponse.statusCode)")
+                if let body = String(data: data, encoding: .utf8) {
+                    print("⚠️ NewsAPI yanıt: \(body)")
                 }
             }
+            throw APIError.invalidResponse
+        }
+        
+        // JSON'ı ayrıştır
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        
+        struct NewsAPIResponse: Codable {
+            let status: String
+            let totalResults: Int
+            let articles: [Article]
             
-            let newsResponse = try decoder.decode(NewsAPIResponse.self, from: data)
+            struct Article: Codable {
+                let source: Source
+                let author: String?
+                let title: String
+                let description: String?
+                let url: String
+                let urlToImage: String?
+                let publishedAt: String
+                let content: String?
+                
+                struct Source: Codable {
+                    let id: String?
+                    let name: String
+                }
+            }
+        }
+        
+        do {
+            let response = try decoder.decode(NewsAPIResponse.self, from: data)
             
-            // APINewsItem formatına dönüştür
-            for article in newsResponse.articles {
-                let newsItem = APINewsItem(
-                    id: UUID().uuidString,
+            let newsItems = response.articles.enumerated().compactMap { (index, article) -> NewsItem? in
+                // Geçersiz URL'leri veya empty description'ları geç
+                if article.description?.isEmpty ?? true || article.urlToImage?.isEmpty ?? true {
+                    return nil
+                }
+                
+                // Sadece kripto ilgili haberleri filtreleme
+                let cryptoKeywords = ["bitcoin", "crypto", "blockchain", "ethereum", "btc", "eth", "nft", "altcoin", "token", "coin", "defi"]
+                let content = (article.title + " " + (article.description ?? "")).lowercased()
+                
+                if !cryptoKeywords.contains(where: { content.contains($0) }) {
+                    return nil
+                }
+                
+                return NewsItem(
+                    id: "newsapi-\(index)",
                     title: article.title,
                     description: article.description ?? "Açıklama yok",
                     url: article.url,
@@ -528,174 +690,188 @@ class APIService: ObservableObject, Equatable {
                     source: article.source.name,
                     publishedAt: article.publishedAt
                 )
-                newsItems.append(newsItem)
             }
             
-            // Haberleri kaşeleyelim
-            cacheNews(newsItems)
-            print("✅ NewsAPI'den \(newsItems.count) haber alındı")
             return newsItems
-            
         } catch {
-            print("⚠️ NewsAPI hatası: \(error.localizedDescription)")
-            // Diğer API'yi dene
+            print("⚠️ NewsAPI JSON ayrıştırma hatası: \(error)")
+            throw APIError.decodingError
+        }
+    }
+    
+    // CryptoControl API - Gerçek Kripto haberleri
+    func fetchCryptoControlNews() async throws -> [NewsItem] {
+        print("📰 CryptoControl'dan kripto haberleri alınıyor...")
+        
+        let apiKey = APIConstants.cryptoControlApiKey
+        let urlString = "https://cryptocontrol.io/api/v1/public/news?language=en&limit=20"
+        
+        guard let url = URL(string: urlString) else {
+            throw APIError.invalidURL
         }
         
-        // 2. CryptoCompare News API'si (Yedek olarak)
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        request.addValue(apiKey, forHTTPHeaderField: "x-api-key")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.invalidResponse
+        }
+        
+        // Model
+        struct CryptoControlArticle: Codable {
+            let id: String
+            let title: String
+            let description: String?
+            let url: String
+            let thumbnail: String?
+            let originalImageUrl: String?
+            let source: CryptoControlSource
+            let publishedAt: String
+            
+            struct CryptoControlSource: Codable {
+                let name: String
+            }
+        }
+        
         do {
-            let endpoint = "https://min-api.cryptocompare.com/data/v2/news/?lang=EN&sortOrder=popular"
-            
-            guard let url = URL(string: endpoint) else {
-                throw APIError.invalidURL
-            }
-            
-            var request = URLRequest(url: url)
-            request.httpMethod = "GET"
-            // API key isteğe bağlı
-            
-            let (data, response) = try await URLSession.shared.data(for: request)
-            
-            guard let httpResponse = response as? HTTPURLResponse, 
-                  (200...299).contains(httpResponse.statusCode) else {
-                print("⚠️ CryptoCompare API hata kodu: \((response as? HTTPURLResponse)?.statusCode ?? 0)")
-                throw APIError.invalidResponse
-            }
-            
-            // JSON parsing
             let decoder = JSONDecoder()
+            let articles = try decoder.decode([CryptoControlArticle].self, from: data)
             
-            // CryptoCompare yanıt yapısı
-            struct CryptoCompareResponse: Codable {
-                let Data: [NewsData]
+            let newsItems = articles.compactMap { article -> NewsItem? in
+                let imageUrl = article.originalImageUrl ?? article.thumbnail ?? "https://cryptocontrol.io/assets/images/logo-light.png"
                 
-                struct NewsData: Codable {
-                    let id: String
-                    let guid: String
-                    let published_on: Int
-                    let imageurl: String
-                    let title: String
-                    let url: String
-                    let source: String
-                    let body: String
-                    let tags: String
-                    let categories: String
-                }
-            }
-            
-            let newsResponse = try decoder.decode(CryptoCompareResponse.self, from: data)
-            
-            // APINewsItem formatına dönüştür
-            for article in newsResponse.Data {
-                let publishedDate = Date(timeIntervalSince1970: TimeInterval(article.published_on))
-                let dateFormatter = ISO8601DateFormatter()
-                
-                let newsItem = APINewsItem(
+                return NewsItem(
                     id: article.id,
                     title: article.title,
-                    description: article.body.prefix(200) + "...",
+                    description: article.description ?? "Açıklama yok",
                     url: article.url,
-                    imageUrl: article.imageurl,
-                    source: article.source,
-                    publishedAt: dateFormatter.string(from: publishedDate)
+                    imageUrl: imageUrl,
+                    source: article.source.name,
+                    publishedAt: article.publishedAt
                 )
+            }
+            
+            return newsItems
+        } catch {
+            print("⚠️ CryptoControl JSON ayrıştırma hatası: \(error)")
+            throw APIError.decodingError
+        }
+    }
+    
+    // Blockchain.com'dan haber çekme
+    func fetchBlockchainNews() async throws -> [NewsItem] {
+        print("📰 Blockchain.com haberleri alınıyor...")
+        
+        let urlString = "https://blog.blockchain.com/feed/"
+        
+        guard let url = URL(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.invalidResponse
+        }
+        
+        // RSS feed'i işleme
+        guard let xmlString = String(data: data, encoding: .utf8) else {
+            throw APIError.decodingError
+        }
+        
+        var newsItems: [NewsItem] = []
+        
+        do {
+            // XML ayrıştırma
+            let itemPattern = try NSRegularExpression(pattern: "<item>(.+?)</item>", options: [.dotMatchesLineSeparators])
+            let titlePattern = try NSRegularExpression(pattern: "<title><!\\[CDATA\\[(.+?)\\]\\]></title>|<title>(.+?)</title>", options: [.dotMatchesLineSeparators])
+            let linkPattern = try NSRegularExpression(pattern: "<link>(.+?)</link>", options: [])
+            let descPattern = try NSRegularExpression(pattern: "<description><!\\[CDATA\\[(.+?)\\]\\]></description>|<description>(.+?)</description>", options: [.dotMatchesLineSeparators])
+            let pubDatePattern = try NSRegularExpression(pattern: "<pubDate>(.+?)</pubDate>", options: [])
+            let mediaPattern = try NSRegularExpression(pattern: "<media:content[^>]+url=\"([^\"]+)\"", options: [])
+            
+            let itemMatches = itemPattern.matches(in: xmlString, options: [], range: NSRange(xmlString.startIndex..., in: xmlString))
+            
+            for (index, match) in itemMatches.enumerated() {
+                guard let itemRange = Range(match.range(at: 1), in: xmlString) else { continue }
+                let itemString = String(xmlString[itemRange])
+                
+                // Başlık
+                var title = ""
+                if let titleMatch = titlePattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                   let titleRange = Range(titleMatch.range(at: 1), in: itemString) {
+                    title = String(itemString[titleRange])
+                } else if let titleMatch = titlePattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                          let titleRange = Range(titleMatch.range(at: 2), in: itemString) {
+                    title = String(itemString[titleRange])
+                }
+                
+                // Link
+                var link = ""
+                if let linkMatch = linkPattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                   let linkRange = Range(linkMatch.range(at: 1), in: itemString) {
+                    link = String(itemString[linkRange])
+                }
+                
+                // Açıklama
+                var description = ""
+                if let descMatch = descPattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                   let descRange = Range(descMatch.range(at: 1), in: itemString) {
+                    description = String(itemString[descRange])
+                } else if let descMatch = descPattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                          let descRange = Range(descMatch.range(at: 2), in: itemString) {
+                    description = String(itemString[descRange])
+                }
+                
+                // HTML temizleme
+                description = description.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+                
+                // Tarih
+                var publishedAt = ISO8601DateFormatter().string(from: Date())
+                if let pubDateMatch = pubDatePattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                   let pubDateRange = Range(pubDateMatch.range(at: 1), in: itemString) {
+                    let pubDateString = String(itemString[pubDateRange])
+                    
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
+                    formatter.locale = Locale(identifier: "en_US_POSIX")
+                    
+                    if let date = formatter.date(from: pubDateString) {
+                        publishedAt = ISO8601DateFormatter().string(from: date)
+                    }
+                }
+                
+                // Resim
+                var imageUrl = "https://blog.blockchain.com/wp-content/uploads/2023/01/Blockchain.com_Logo.png"
+                if let mediaMatch = mediaPattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                   let mediaRange = Range(mediaMatch.range(at: 1), in: itemString) {
+                    imageUrl = String(itemString[mediaRange])
+                }
+                
+                // Haber öğesini oluştur
+                let newsItem = NewsItem(
+                    id: "blockchain-\(index)",
+                    title: title,
+                    description: description,
+                    url: link,
+                    imageUrl: imageUrl,
+                    source: "Blockchain.com",
+                    publishedAt: publishedAt
+                )
+                
                 newsItems.append(newsItem)
             }
             
-            // Haberleri kaşeleyelim
-            cacheNews(newsItems)
-            print("✅ CryptoCompare'den \(newsItems.count) haber alındı")
             return newsItems
             
         } catch {
-            print("⚠️ CryptoCompare API hatası: \(error.localizedDescription)")
-            // Yedek olarak statik içerik kullan
-        }
-        
-        // Eğer buraya kadar geldiyse, yedek haberler oluştur
-        print("⚠️ Haber API'leri başarısız oldu, yedek haberler kullanılıyor...")
-        
-        // Yedek haberler
-        newsItems = [
-            APINewsItem(
-                id: UUID().uuidString,
-                title: "Bitcoin 50.000 Doları Aştı",
-                description: "Bitcoin son 3 ayın en yüksek seviyesine ulaşarak 50.000 doları geçti. Analistler yükseliş trendinin devam edebileceğini belirtiyor.",
-                url: "https://www.example.com/bitcoin-news",
-                imageUrl: "https://cryptologos.cc/logos/bitcoin-btc-logo.png",
-                source: "Crypto News",
-                publishedAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3600))
-            ),
-            APINewsItem(
-                id: UUID().uuidString,
-                title: "Ethereum 2.0 Güncellemesi Yaklaşıyor",
-                description: "Ethereum ağı, uzun zamandır beklenen 2.0 güncellemesine hazırlanıyor. Bu güncelleme ile birlikte ağın hızı ve ölçeklenebilirliği artacak.",
-                url: "https://www.example.com/ethereum-news",
-                imageUrl: "https://cryptologos.cc/logos/ethereum-eth-logo.png",
-                source: "Blockchain Daily",
-                publishedAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-7200))
-            ),
-            APINewsItem(
-                id: UUID().uuidString,
-                title: "Dogecoin, Elon Musk'ın Tweeti ile Yükseldi",
-                description: "Elon Musk'ın Twitter'da paylaştığı Dogecoin içerikli post, DOGE fiyatında ani bir yükselişe neden oldu.",
-                url: "https://www.example.com/dogecoin-news",
-                imageUrl: "https://cryptologos.cc/logos/dogecoin-doge-logo.png",
-                source: "Crypto Pulse",
-                publishedAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-10800))
-            ),
-            APINewsItem(
-                id: UUID().uuidString,
-                title: "NFT Piyasasında Rekor Satış",
-                description: "Bir dijital sanat eseri, NFT pazarında rekor kırarak 15 milyon dolara satıldı. Bu satış, NFT'lere olan ilginin artmaya devam ettiğini gösteriyor.",
-                url: "https://www.example.com/nft-news",
-                imageUrl: "https://www.arweave.net/Sr6h_YcjTrxHKgas7GN3-QqXPCKGiZUTnqYVKQcgIS0?ext=png",
-                source: "Art & Tech",
-                publishedAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-14400))
-            ),
-            APINewsItem(
-                id: UUID().uuidString,
-                title: "Cardano, Akıllı Sözleşme Özelliğini Aktifleştirdi",
-                description: "Cardano ağı, Alonzo güncellemesi ile birlikte akıllı sözleşme özelliğini aktifleştirdi. Bu, ADA ekosistemi için önemli bir dönüm noktası.",
-                url: "https://www.example.com/cardano-news",
-                imageUrl: "https://cryptologos.cc/logos/cardano-ada-logo.png",
-                source: "Crypto Insider",
-                publishedAt: ISO8601DateFormatter().string(from: Date().addingTimeInterval(-18000))
-            )
-        ]
-        
-        // Yedek haberleri de önbelleğe ekle
-        cacheNews(newsItems)
-        return newsItems
-    }
-    
-    // Haberler için önbellek fonksiyonları
-    private func checkNewsCache() -> [APINewsItem]? {
-        guard let lastNewsFetchTime = UserDefaults.standard.object(forKey: "lastNewsFetchTime") as? Date else {
-            return nil
-        }
-        
-        let cacheValidityDuration: TimeInterval = 30 * 60 // 30 dakika
-        
-        if Date().timeIntervalSince(lastNewsFetchTime) < cacheValidityDuration,
-           let cachedNewsData = UserDefaults.standard.data(forKey: "cachedNews") {
-            do {
-                return try JSONDecoder().decode([APINewsItem].self, from: cachedNewsData)
-            } catch {
-                print("⚠️ Haber önbelleği decode hatası: \(error.localizedDescription)")
-                return nil
-            }
-        }
-        
-        return nil
-    }
-    
-    private func cacheNews(_ news: [APINewsItem]) {
-        do {
-            let encodedNews = try JSONEncoder().encode(news)
-            UserDefaults.standard.set(encodedNews, forKey: "cachedNews")
-            UserDefaults.standard.set(Date(), forKey: "lastNewsFetchTime")
-        } catch {
-            print("⚠️ Haber önbellek hatası: \(error.localizedDescription)")
+            print("⚠️ Blockchain RSS ayrıştırma hatası: \(error)")
+            throw APIError.decodingError
         }
     }
     
@@ -1150,7 +1326,7 @@ class APIService: ObservableObject, Equatable {
         }
     }
     
-    // NewsItem modeli
+    // NewsItem modeli (API Yanıtları için)
     struct APINewsItem: Identifiable, Comparable, Codable {
         let id: String
         let title: String
@@ -1167,11 +1343,293 @@ class APIService: ObservableObject, Equatable {
         static func > (lhs: APINewsItem, rhs: APINewsItem) -> Bool {
             return lhs.publishedAt < rhs.publishedAt
         }
+        
+        static func == (lhs: APINewsItem, rhs: APINewsItem) -> Bool {
+            return lhs.id == rhs.id
+        }
+    }
+    
+    // Haberler için önbellek fonksiyonları
+    private func checkNewsCache() -> [APINewsItem]? {
+        guard let lastNewsFetchTime = UserDefaults.standard.object(forKey: "lastNewsFetchTime") as? Date else {
+            return nil
+        }
+        
+        let cacheValidityDuration: TimeInterval = 30 * 60 // 30 dakika
+        
+        if Date().timeIntervalSince(lastNewsFetchTime) < cacheValidityDuration,
+           let cachedNewsData = UserDefaults.standard.data(forKey: "cachedNews") {
+            do {
+                return try JSONDecoder().decode([APINewsItem].self, from: cachedNewsData)
+            } catch {
+                print("⚠️ Haber önbelleği decode hatası: \(error.localizedDescription)")
+                return nil
+            }
+        }
+        
+        return nil
+    }
+    
+    private func cacheNews(_ news: [APINewsItem]) {
+        do {
+            let encodedNews = try JSONEncoder().encode(news)
+            UserDefaults.standard.set(encodedNews, forKey: "cachedNews")
+            UserDefaults.standard.set(Date(), forKey: "lastNewsFetchTime")
+        } catch {
+            print("⚠️ Haber önbellek hatası: \(error.localizedDescription)")
+        }
+    }
+    
+    // Eski API entegrasyonu için gerekli metod
+    @Sendable
+    func fetchNews() async throws -> [APINewsItem] {
+        // Yeni kripto haber API'lerimizi kullanarak haberleri getirelim
+        let cryptoNews = try await fetchCryptoNews()
+        
+        // NewsItem -> APINewsItem dönüşümü
+        return cryptoNews.map { item in
+            APINewsItem(
+                id: item.id,
+                title: item.title,
+                description: item.description,
+                url: item.url,
+                imageUrl: item.imageUrl,
+                source: item.source,
+                publishedAt: item.publishedAt
+            )
+        }
     }
     
     // Equatable protokolü için gerekli uygulama
     static func == (lhs: APIService, rhs: APIService) -> Bool {
         return lhs === rhs // Referans eşitliği - bu bir singleton olduğundan her zaman eşit olacak
+    }
+    
+    // CoinDesk haberleri için yeni metod
+    func fetchCoinDeskNews() async throws -> [NewsItem] {
+        print("📰 CoinDesk haberlerini almaya çalışıyorum...")
+        // CoinDesk RSS besleme URL'si
+        let urlString = "https://www.coindesk.com/arc/outboundfeeds/rss/"
+        
+        guard let url = URL(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse, 
+              (200...299).contains(httpResponse.statusCode) else {
+            throw APIError.invalidResponse
+        }
+        
+        // RSS feed'i işleme
+        guard let xmlString = String(data: data, encoding: .utf8) else {
+            throw APIError.decodingError
+        }
+        
+        var newsItems: [NewsItem] = []
+        
+        do {
+            // XML ayrıştırma
+            let itemPattern = try NSRegularExpression(pattern: "<item>(.+?)</item>", options: [.dotMatchesLineSeparators])
+            let titlePattern = try NSRegularExpression(pattern: "<title><!\\[CDATA\\[(.+?)\\]\\]></title>|<title>(.+?)</title>", options: [.dotMatchesLineSeparators])
+            let linkPattern = try NSRegularExpression(pattern: "<link>(.+?)</link>", options: [])
+            let descPattern = try NSRegularExpression(pattern: "<description><!\\[CDATA\\[(.+?)\\]\\]></description>|<description>(.+?)</description>", options: [.dotMatchesLineSeparators])
+            let pubDatePattern = try NSRegularExpression(pattern: "<pubDate>(.+?)</pubDate>", options: [])
+            let mediaPattern = try NSRegularExpression(pattern: "<media:content[^>]+url=\"([^\"]+)\"", options: [])
+            
+            let itemMatches = itemPattern.matches(in: xmlString, options: [], range: NSRange(xmlString.startIndex..., in: xmlString))
+            
+            for (index, match) in itemMatches.prefix(20).enumerated() {
+                guard let itemRange = Range(match.range(at: 1), in: xmlString) else { continue }
+                let itemString = String(xmlString[itemRange])
+                
+                // Başlık
+                var title = ""
+                if let titleMatch = titlePattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                   let titleRange = Range(titleMatch.range(at: 1), in: itemString) {
+                    title = String(itemString[titleRange])
+                } else if let titleMatch = titlePattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                          let titleRange = Range(titleMatch.range(at: 2), in: itemString) {
+                    title = String(itemString[titleRange])
+                }
+                
+                // Link
+                var link = ""
+                if let linkMatch = linkPattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                   let linkRange = Range(linkMatch.range(at: 1), in: itemString) {
+                    link = String(itemString[linkRange])
+                }
+                
+                // Açıklama
+                var description = ""
+                if let descMatch = descPattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                   let descRange = Range(descMatch.range(at: 1), in: itemString) {
+                    description = String(itemString[descRange])
+                } else if let descMatch = descPattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                          let descRange = Range(descMatch.range(at: 2), in: itemString) {
+                    description = String(itemString[descRange])
+                }
+                
+                // HTML temizleme
+                description = description.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+                
+                // Tarih
+                var publishedAt = ISO8601DateFormatter().string(from: Date())
+                if let pubDateMatch = pubDatePattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                   let pubDateRange = Range(pubDateMatch.range(at: 1), in: itemString) {
+                    let pubDateString = String(itemString[pubDateRange])
+                    
+                    let formatter = DateFormatter()
+                    formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
+                    formatter.locale = Locale(identifier: "en_US_POSIX")
+                    
+                    if let date = formatter.date(from: pubDateString) {
+                        publishedAt = ISO8601DateFormatter().string(from: date)
+                    }
+                }
+                
+                // Resim
+                var imageUrl = "https://www.coindesk.com/resizer/G1cH9UsXTJm5JYoPZ8X0tHK-9Fg=/1200x600/filters:quality(80):format(jpg)/cloudfront-us-east-1.images.arcpublishing.com/coindesk/XDVS72GPVRG2ZJ7KZWOKFUQUZE.jpg"
+                if let mediaMatch = mediaPattern.firstMatch(in: itemString, options: [], range: NSRange(itemString.startIndex..., in: itemString)),
+                   let mediaRange = Range(mediaMatch.range(at: 1), in: itemString) {
+                    imageUrl = String(itemString[mediaRange])
+                }
+                
+                // Haber öğesini oluştur
+                let newsItem = NewsItem(
+                    id: "coindesk-\(index)",
+                    title: title,
+                    description: description,
+                    url: link,
+                    imageUrl: imageUrl,
+                    source: "CoinDesk",
+                    publishedAt: publishedAt
+                )
+                
+                newsItems.append(newsItem)
+            }
+            
+            return newsItems
+            
+        } catch {
+            print("⚠️ CoinDesk XML ayrıştırma hatası: \(error)")
+            throw APIError.decodingError
+        }
+    }
+    
+    // CryptoCompare API yanıt modelleri
+    struct CryptoCompareNewsResponse: Codable {
+        let type: Int
+        let message: String
+        let data: [CryptoCompareNewsItem]
+        
+        enum CodingKeys: String, CodingKey {
+            case type = "Type"
+            case message = "Message"
+            case data = "Data"
+        }
+    }
+
+    struct CryptoCompareNewsItem: Codable {
+        let id: Int
+        let title: String
+        let body: String
+        let imageurl: String
+        let source: String
+        let published_on: Int
+        let url: String
+    }
+    
+    // CryptoCompare API'den haberleri çek
+    func fetchCryptoCompareNews() async throws -> [NewsItem] {
+        print("📰 CryptoCompare haberler alınıyor...")
+        
+        // API endpoint - CryptoCompare API'sine istekte bulunalım 
+        let urlString = "https://min-api.cryptocompare.com/data/v2/news/?lang=EN&sortOrder=popular&extraParams=CryptoBuddy"
+        guard let url = URL(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        // API isteği oluştur
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 15
+        
+        // API anahtarını header olarak ekle
+        if !APIConstants.cryptocompareApiKey.isEmpty {
+            request.addValue(APIConstants.cryptocompareApiKey, forHTTPHeaderField: "authorization")
+        }
+        
+        print("🌐 CryptoCompare'den haberler isteniyor...")
+        
+        // API isteğini gönder
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        // Yanıtı kontrol et
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("⚠️ HTTP yanıtı alınamadı!")
+            throw APIError.invalidResponse
+        }
+        
+        print("🔄 HTTP yanıt kodu: \(httpResponse.statusCode)")
+        
+        if !(200...299).contains(httpResponse.statusCode) {
+            let responseString = String(data: data, encoding: .utf8) ?? "Yanıt içeriği okunamadı"
+            print("⚠️ API Hata: \(httpResponse.statusCode)")
+            print("⚠️ API Yanıt: \(responseString)")
+            throw APIError.invalidResponse
+        }
+        
+        // JSON'ı parse et
+        let decoder = JSONDecoder()
+        
+        do {
+            let newsResponse = try decoder.decode(CryptoCompareNewsResponse.self, from: data)
+            
+            print("✅ CryptoCompare'den haberler başarıyla alındı: \(newsResponse.data.count) haber")
+            
+            // Dönüştür ve önbelleğe al
+            let newsItems = newsResponse.data.map { item in
+                NewsItem(
+                    id: String(item.id),
+                    title: item.title,
+                    description: item.body,
+                    url: item.url,
+                    imageUrl: item.imageurl,
+                    source: item.source,
+                    publishedAt: formatDate(timestamp: item.published_on)
+                )
+            }
+            
+            return newsItems
+        } catch {
+            print("⚠️ JSON ayrıştırma hatası: \(error.localizedDescription)")
+            throw APIError.decodingError
+        }
+    }
+    
+    // Timestamp'i uygun formata dönüştürme
+    private func formatDate(timestamp: Int) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+        let formatter = ISO8601DateFormatter()
+        return formatter.string(from: date)
+    }
+    
+    // Haberleri önbelleğe alma
+    private func cacheCryptoNews(_ news: [NewsItem]) {
+        if let encoded = try? JSONEncoder().encode(news) {
+            UserDefaults.standard.set(encoded, forKey: "cachedCryptoNews")
+        }
+    }
+    
+    // Önbellekten haberleri yükleme
+    private func loadCachedNews() -> [NewsItem]? {
+        if let data = UserDefaults.standard.data(forKey: "cachedCryptoNews"),
+           let news = try? JSONDecoder().decode([NewsItem].self, from: data) {
+            return news
+        }
+        return nil
     }
 }
 
@@ -1367,4 +1825,6 @@ struct CoinMarketCapQuote: Codable {
         case percentChange24h = "percent_change_24h"
         case marketCap = "market_cap"
     }
-} 
+}
+
+// MARK: - CryptoCompare News API'si ile ilgili kodları buradan kaldırıyoruz 
