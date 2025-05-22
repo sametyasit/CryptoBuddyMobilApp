@@ -1,4 +1,5 @@
 import SwiftUI
+import SafariServices
 
 struct SearchView: View {
     @Binding var showingLoginView: Bool
@@ -8,7 +9,7 @@ struct SearchView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Color.black.edgesIgnoringSafeArea(.all)
+                Color.black.ignoresSafeArea()
                 
                 VStack {
                     // Search bar
@@ -403,9 +404,13 @@ struct NewsItemRow: View {
             .cornerRadius(12)
         }
         .sheet(isPresented: $showSafariView) {
-            if let url = URL(string: newsItem.url) {
-                CustomSafariView(url: url)
+            Button("Safari'de Aç") {
+                if let url = URL(string: newsItem.url) {
+                    UIApplication.shared.open(url)
+                }
+                showSafariView = false
             }
+            .padding()
         }
     }
     
