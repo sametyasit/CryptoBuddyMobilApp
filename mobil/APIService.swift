@@ -123,8 +123,8 @@ class APIService: ObservableObject, Equatable {
     // MARK: - Main API Methods
     
     @Sendable
-    func fetchCoins(page: Int, perPage: Int) async throws -> APIResponse {
-        print("🔍 Coinler alınıyor: Sayfa \(page), sayfa başına \(perPage) coin")
+    func fetchCoins(page: Int, perPage: Int, priceChangePercentage: String = "24h") async throws -> APIResponse {
+        print("🔍 Coinler alınıyor: Sayfa \(page), sayfa başına \(perPage) coin, fiyat değişimi: \(priceChangePercentage)")
         
         // İlk sayfa için ID'leri temizle
         if page == 1 {
@@ -132,7 +132,7 @@ class APIService: ObservableObject, Equatable {
         }
         
         // Önbellekten kontrol et
-        let cacheKey: String = "coins_\(page)_\(perPage)"
+        let cacheKey: String = "coins_\(page)_\(perPage)_\(priceChangePercentage)"
         if let cached = coinCache[cacheKey],
            Date().timeIntervalSince(cached.timestamp) < cacheValidDuration {
             print("✅ Önbellekten veri kullanılıyor (sayfa \(page)) - \(cached.response.coins.count) coin")
@@ -143,7 +143,7 @@ class APIService: ObservableObject, Equatable {
         // Tüm API'leri dene, herhangi biri başarılı olursa onu kullan
         do {
             // 1. CoinGecko
-            return try await fetchFromCoinGecko(page: page, perPage: perPage, cacheKey: cacheKey)
+            return try await fetchFromCoinGecko(page: page, perPage: perPage, priceChangePercentage: priceChangePercentage, cacheKey: cacheKey)
         } catch {
             print("⚠️ CoinGecko API hatası: \(error.localizedDescription)")
             do {
@@ -176,11 +176,11 @@ class APIService: ObservableObject, Equatable {
     
     // MARK: - Individual API Fetchers
     
-    private func fetchFromCoinGecko(page: Int, perPage: Int, cacheKey: String) async throws -> APIResponse {
+    private func fetchFromCoinGecko(page: Int, perPage: Int, priceChangePercentage: String = "24h", cacheKey: String) async throws -> APIResponse {
         print("🔍 CoinGecko API kullanılıyor...")
         
         // İşlem hacmi ve diğer verileri de almak için parametreler eklendi
-        let urlString = "\(coinGeckoURL)/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=\(perPage)&page=\(page)&sparkline=false&price_change_percentage=24h&include_24h_vol=true&include_24h_change=true&include_last_updated_at=true"
+        let urlString = "\(coinGeckoURL)/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=\(perPage)&page=\(page)&sparkline=false&price_change_percentage=\(priceChangePercentage)&include_24h_vol=true&include_24h_change=true&include_last_updated_at=true"
         
         guard let url = URL(string: urlString) else {
             throw APIError.invalidURL
@@ -209,28 +209,44 @@ class APIService: ObservableObject, Equatable {
             throw APIError.invalidResponse
         }
         
+        // API yanıtını işleyip Coin modellerine dönüştürüyoruz
         let decoder = JSONDecoder()
-        let geckoCoins = try decoder.decode([CoinGeckoData].self, from: data)
+        let geckoCoins = try decoder.decode([CoinGeckoMarket].self, from: data)
         
-        let mappedCoins = geckoCoins.map { coinData in
+        // Coin modellerine dönüştür
+        let mappedCoins = geckoCoins.map { gCoin -> Coin in
+            // Main properties
             var coin = Coin(
-                id: coinData.id,
-                name: coinData.name,
-                symbol: coinData.symbol.uppercased(),
-                price: coinData.currentPrice,
-                change24h: coinData.priceChangePercentage24h,
-                marketCap: coinData.marketCap,
-                image: coinData.image,
-                rank: coinData.marketCapRank ?? 0
+                id: gCoin.id,
+                name: gCoin.name,
+                symbol: gCoin.symbol,
+                price: gCoin.current_price,
+                change24h: gCoin.price_change_percentage_24h ?? 0,
+                marketCap: gCoin.market_cap ?? 0,
+                image: gCoin.image,
+                rank: gCoin.market_cap_rank ?? 0
             )
             
             // Ek verileri ekle
-            coin.totalVolume = coinData.totalVolume ?? 0
-            coin.high24h = coinData.high24h ?? 0
-            coin.low24h = coinData.low24h ?? 0
-            coin.priceChange24h = coinData.priceChange24h ?? 0
-            coin.ath = coinData.ath ?? 0
-            coin.athChangePercentage = coinData.athChangePercentage ?? 0
+            coin.totalVolume = gCoin.total_volume ?? 0
+            coin.high24h = gCoin.high_24h ?? 0
+            coin.low24h = gCoin.low_24h ?? 0
+            coin.priceChange24h = gCoin.price_change_24h ?? 0
+            coin.ath = gCoin.ath ?? 0
+            coin.athChangePercentage = gCoin.ath_change_percentage ?? 0
+            
+            // Farklı zaman aralıkları için değişim verilerini ekle
+            if let priceChange1h = gCoin.price_change_percentage_1h_in_currency {
+                coin.changeHour = priceChange1h
+            }
+            
+            if let priceChange7d = gCoin.price_change_percentage_7d_in_currency {
+                coin.changeWeek = priceChange7d
+            }
+            
+            if let priceChange30d = gCoin.price_change_percentage_30d_in_currency {
+                coin.changeMonth = priceChange30d
+            }
             
             return coin
         }
@@ -1636,6 +1652,37 @@ class APIService: ObservableObject, Equatable {
 // MARK: - Models
 
 // CoinGecko Modelleri
+struct CoinGeckoMarket: Codable {
+    let id: String
+    let symbol: String
+    let name: String
+    let image: String
+    let current_price: Double
+    let market_cap: Double?
+    let market_cap_rank: Int?
+    let fully_diluted_valuation: Double?
+    let total_volume: Double?
+    let high_24h: Double?
+    let low_24h: Double?
+    let price_change_24h: Double?
+    let price_change_percentage_24h: Double?
+    let price_change_percentage_1h_in_currency: Double?
+    let price_change_percentage_7d_in_currency: Double?
+    let price_change_percentage_30d_in_currency: Double?
+    let market_cap_change_24h: Double?
+    let market_cap_change_percentage_24h: Double?
+    let circulating_supply: Double?
+    let total_supply: Double?
+    let max_supply: Double?
+    let ath: Double?
+    let ath_change_percentage: Double?
+    let ath_date: String?
+    let atl: Double?
+    let atl_change_percentage: Double?
+    let atl_date: String?
+    let last_updated: String?
+}
+
 struct CoinGeckoData: Codable {
     let id: String
     let symbol: String
