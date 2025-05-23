@@ -45,6 +45,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         // Uygulama görünümü için genel ayarlar
         configureAppAppearance()
         
+        // Initialize real-time crypto data service
+        initializeCryptoDataService()
+        
         return true
     }
     
@@ -69,5 +72,13 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
             UINavigationBar.appearance().standardAppearance = appearance
             UINavigationBar.appearance().scrollEdgeAppearance = appearance
         }
+    }
+
+    private func initializeCryptoDataService() {
+        // Start the real-time data service
+        CryptoDataService.shared.startService()
+        
+        // Log connection status
+        print("Real-time crypto data service initialized")
     }
 } 
