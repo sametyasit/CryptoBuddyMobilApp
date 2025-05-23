@@ -20,6 +20,8 @@ class CoinNetworkManager {
         
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
+        request.timeoutInterval = 15 // Daha uzun timeout ekle
+        request.cachePolicy = .returnCacheDataElseLoad // Önbelleği kullan
         
         // CoinGecko requires an API key for higher rate limits, but free tier doesn't need one
         // If you have a Pro API key, you can add it here
@@ -27,6 +29,18 @@ class CoinNetworkManager {
         
         let task = URLSession.shared.dataTask(with: request) { (data, response, error) in
             if let error = error {
+                // Hata durumunda önbellekteki verileri dene
+                if let cachedResponse = URLCache.shared.cachedResponse(for: URLRequest(url: url)) {
+                    do {
+                        let coins = try JSONDecoder().decode([Coin].self, from: cachedResponse.data)
+                        print("API hatası: \(error.localizedDescription), önbellekteki veriler kullanılıyor")
+                        completion(.success(coins))
+                    } catch {
+                        completion(.failure(.serverError(error.localizedDescription)))
+                    }
+                    return
+                }
+                
                 completion(.failure(.serverError(error.localizedDescription)))
                 return
             }
@@ -38,6 +52,18 @@ class CoinNetworkManager {
             
             // CoinGecko rate limit handling
             if httpResponse.statusCode == 429 {
+                // Rate limit aşıldığında önbellekteki verileri kullan
+                if let cachedResponse = URLCache.shared.cachedResponse(for: URLRequest(url: url)) {
+                    do {
+                        let coins = try JSONDecoder().decode([Coin].self, from: cachedResponse.data)
+                        print("API rate limit aşıldı, önbellekteki veriler kullanılıyor")
+                        completion(.success(coins))
+                    } catch {
+                        completion(.failure(.serverError("API Rate limit exceeded. Please try again later.")))
+                    }
+                    return
+                }
+                
                 completion(.failure(.serverError("API Rate limit exceeded. Please try again later.")))
                 return
             }
@@ -49,6 +75,10 @@ class CoinNetworkManager {
             
             do {
                 let coins = try JSONDecoder().decode([Coin].self, from: data)
+                
+                // Coin verileri içinde logolar için URL'leri ön yükle
+                self.preloadCoinImages(coins)
+                
                 completion(.success(coins))
             } catch {
                 print("Decoding error: \(error)")
@@ -60,6 +90,18 @@ class CoinNetworkManager {
         task.resume()
     }
     
+    // Logoları ön yükleme fonksiyonu
+    private func preloadCoinImages(_ coins: [Coin]) {
+        // En yüksek piyasa değerine sahip ilk 20 coinin logosunu önden yükle
+        let topCoins = Array(coins.prefix(20))
+        
+        DispatchQueue.global(qos: .utility).async {
+            for coin in topCoins {
+                ImageCacheManager.shared.loadCoinImage(from: coin.image, symbol: coin.symbol) { _ in }
+            }
+        }
+    }
+    
     // Tek bir coin'in detaylarını getiren fonksiyon
     func fetchCoinDetail(id: String, completion: @escaping (Result<CoinDetail, NetworkError>) -> Void) {
         let urlString = "\(baseURL)/coins/\(id)?localization=false&tickers=false&market_data=true&community_data=false&developer_data=false"
@@ -69,8 +111,24 @@ class CoinNetworkManager {
             return
         }
         
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        request.cachePolicy = .returnCacheDataElseLoad
+        
         let task = URLSession.shared.dataTask(with: url) { (data, response, error) in
             if let error = error {
+                // Hata durumunda önbellekteki verileri dene
+                if let cachedResponse = URLCache.shared.cachedResponse(for: URLRequest(url: url)) {
+                    do {
+                        let coinDetail = try JSONDecoder().decode(CoinDetail.self, from: cachedResponse.data)
+                        print("API hatası: \(error.localizedDescription), önbellekteki detaylar kullanılıyor")
+                        completion(.success(coinDetail))
+                    } catch {
+                        completion(.failure(.serverError(error.localizedDescription)))
+                    }
+                    return
+                }
+                
                 completion(.failure(.serverError(error.localizedDescription)))
                 return
             }
@@ -83,6 +141,18 @@ class CoinNetworkManager {
             do {
                 let coinDetail = try JSONDecoder().decode(CoinDetail.self, from: data)
                 completion(.success(coinDetail))
+                
+                // Detay logolarını ön belleğe al
+                if let thumbUrl = URL(string: coinDetail.image.thumb) {
+                    URLSession.shared.dataTask(with: thumbUrl) { _, _, _ in }.resume()
+                }
+                if let smallUrl = URL(string: coinDetail.image.small) {
+                    URLSession.shared.dataTask(with: smallUrl) { _, _, _ in }.resume()
+                }
+                if let largeUrl = URL(string: coinDetail.image.large) {
+                    URLSession.shared.dataTask(with: largeUrl) { _, _, _ in }.resume()
+                }
+                
             } catch {
                 print("Decoding error: \(error)")
                 completion(.failure(.decodingError))
@@ -94,9 +164,12 @@ class CoinNetworkManager {
     
     // Görsel indirme fonksiyonu - önbelleğe alır
     let imageCache = NSCache<NSString, UIImage>()
+    private let concurrentImageQueue = DispatchQueue(label: "com.cryptobuddy.imageQueue", attributes: .concurrent)
+    private var ongoingDownloads = [String: URLSessionDataTask]()
+    private let ongoingDownloadsLock = NSLock()
     
     func downloadImage(from urlString: String, completion: @escaping (UIImage?) -> Void) {
-        // Önbellekte varsa oradan al
+        // Önbellekte varsa hemen döndür
         if let cachedImage = imageCache.object(forKey: urlString as NSString) {
             completion(cachedImage)
             return
@@ -107,24 +180,56 @@ class CoinNetworkManager {
             return
         }
         
-        URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
-            guard let self = self,
-                  let data = data,
-                  let image = UIImage(data: data),
-                  error == nil else {
-                DispatchQueue.main.async {
-                    completion(nil)
-                }
+        // Devam eden indirme kontrolü - aynı URL için birden fazla indirme olmaması için
+        ongoingDownloadsLock.lock()
+        if let existingTask = ongoingDownloads[urlString] {
+            ongoingDownloadsLock.unlock()
+            // Aynı URL için zaten indirme işlemi yapılıyor, tamamlanınca tüm bekleyenlere bildir
+            existingTask.cancel() // Eski görevi iptal et, yeni bir tane oluştur
+        }
+        ongoingDownloadsLock.unlock()
+        
+        // Yeni indirme görevi oluştur
+        let task = URLSession.shared.dataTask(with: url) { [weak self] data, response, error in
+            guard let self = self else { return }
+            
+            // İndirme tamamlandı, kaydını kaldır
+            self.ongoingDownloadsLock.lock()
+            self.ongoingDownloads.removeValue(forKey: urlString)
+            self.ongoingDownloadsLock.unlock()
+            
+            if let error = error {
+                print("Logo indirme hatası: \(error.localizedDescription)")
+                completion(nil)
                 return
             }
             
-            // Önbelleğe kaydet
-            self.imageCache.setObject(image, forKey: urlString as NSString)
-            
-            DispatchQueue.main.async {
-                completion(image)
+            guard let data = data else {
+                completion(nil)
+                return
             }
-        }.resume()
+            
+            self.concurrentImageQueue.async {
+                if let image = UIImage(data: data) {
+                    // Önbelleğe kaydet
+                    self.imageCache.setObject(image, forKey: urlString as NSString)
+                    
+                    DispatchQueue.main.async {
+                        completion(image)
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        completion(nil)
+                    }
+                }
+            }
+        }
+        
+        // Yeni indirme görevini kaydet ve başlat
+        ongoingDownloadsLock.lock()
+        ongoingDownloads[urlString] = task
+        ongoingDownloadsLock.unlock()
+        task.resume()
     }
 }
 
