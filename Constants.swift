@@ -13,6 +13,17 @@ struct Constants {
         // CoinGecko API
         static let coinGeckoBaseURL = "https://api.coingecko.com/api/v3"
         static let coinGeckoMarketsURL = "\(coinGeckoBaseURL)/coins/markets"
+        
+        // Websocket URLs for real-time data
+        static let coinbaseWebSocketURL = "wss://ws-feed.exchange.coinbase.com"
+        static let binanceWebSocketURL = "wss://stream.binance.com:9443/ws"
+        
+        // FTX API 
+        static let ftxRestBaseURL = "https://ftx.com/api"
+        static let ftxWebSocketURL = "wss://ftx.com/ws/"
+        
+        // CryptoCompare Websocket
+        static let cryptoCompareWSURL = "wss://streamer.cryptocompare.com/v2?api_key=\(cryptoCompareAPIKey)"
     }
     
     struct UI {
@@ -27,6 +38,7 @@ struct Constants {
     
     struct Time {
         static let refreshInterval: TimeInterval = 300 // 5 dakika
-        static let coinRefreshInterval: TimeInterval = 60 // 1 dakika
+        static let coinRefreshInterval: TimeInterval = 30 // 30 saniye (WebSocket kullanılmazsa yedek olarak)
+        static let webSocketReconnectDelay: TimeInterval = 5 // Websocket bağlantı hatası sonrası 5 saniye bekleme
     }
 } 
