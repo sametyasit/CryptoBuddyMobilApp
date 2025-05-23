@@ -1842,10 +1842,286 @@ struct PriceChart: View {
 // MARK: - Portfolio View
 struct PortfolioView: View {
     @Binding var showingLoginView: Bool
+    @State private var isShowingGainers = true
+    @State private var selectedTimeFrame = 0
+    @State private var coins: [Coin] = []
+    @State private var isLoading = true
+    @State private var errorMessage: String? = nil
+    @State private var showingCoinDetail = false
+    @State private var selectedCoinID = ""
+    @State private var timeframeParam = "24h"
+    
+    // Farklı zaman aralıkları için string parametreleri
+    var timeFrames = ["24s", "1h", "7g", "30g"]
+    var timeFrameParams = ["24h", "1h", "7d", "30d"]
     
     var body: some View {
-        // Portfolio view content
-        Text("Portfolio View")
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                VStack(spacing: 20) {
+                    // Filtre kontrolleri
+                    HStack {
+                        Picker("Filtreleme", selection: $isShowingGainers) {
+                            Text("Yükselenler").tag(true)
+                            Text("Düşenler").tag(false)
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                        .padding(.horizontal)
+                        .onChange(of: isShowingGainers) { oldValue, newValue in
+                            filterAndSortCoins()
+                        }
+                    }
+                    
+                    // Zaman aralığı seçimi
+                    HStack {
+                        Picker("Zaman Aralığı", selection: $selectedTimeFrame) {
+                            ForEach(0..<timeFrames.count, id: \.self) { index in
+                                Text(timeFrames[index]).tag(index)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                        .padding(.horizontal)
+                        .onChange(of: selectedTimeFrame) { oldValue, newValue in
+                            timeframeParam = timeFrameParams[newValue]
+                            loadCoins()
+                        }
+                    }
+                    
+                    if isLoading {
+                        // Yükleniyor görünümü
+                        Spacer()
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
+                        Text("Coinler yükleniyor...")
+                            .foregroundColor(.gray)
+                            .padding(.top, 20)
+                        Spacer()
+                    } else if let error = errorMessage {
+                        // Hata görünümü
+                        Spacer()
+                        Text("Hata: \(error)")
+                            .foregroundColor(.red)
+                            .padding()
+                        Button("Tekrar Dene") {
+                            loadCoins()
+                        }
+                        .foregroundColor(.black)
+                        .padding()
+                        .background(AppColorsTheme.gold)
+                        .cornerRadius(10)
+                        Spacer()
+                    } else if coins.isEmpty {
+                        // Boş veri görünümü
+                        Spacer()
+                        Text("Veri bulunamadı")
+                            .foregroundColor(.white)
+                            .padding()
+                        Button("Tekrar Dene") {
+                            loadCoins()
+                        }
+                        .foregroundColor(.black)
+                        .padding()
+                        .background(AppColorsTheme.gold)
+                        .cornerRadius(10)
+                        Spacer()
+                    } else {
+                        // Coin listesi
+                        ScrollView {
+                            LazyVStack(spacing: 10) {
+                                ForEach(coins.prefix(20)) { coin in
+                                    Button(action: {
+                                        selectedCoinID = coin.id
+                                        showingCoinDetail = true
+                                    }) {
+                                        coinRow(coin: coin)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        .refreshable {
+                            await loadCoinsAsync()
+                        }
+                    }
+                    
+                    Spacer()
+                }
+                .padding(.top, 10)
+            }
+            .navigationTitle("Piyasa")
+            .onAppear {
+                loadCoins()
+            }
+            .sheet(isPresented: $showingCoinDetail) {
+                CoinDetailView(coinId: selectedCoinID)
+            }
+        }
+    }
+    
+    private func coinRow(coin: Coin) -> some View {
+        HStack(spacing: 12) {
+            // Sıralama
+            Text("\(coin.rank)")
+                .foregroundColor(.gray)
+                .font(.system(size: 16, weight: .medium))
+                .frame(width: 30, alignment: .center)
+            
+            // Coin ikonu - Geliştirilmiş logo görünümü
+            ZStack {
+                Circle()
+                    .fill(Color(UIColor.systemGray6))
+                    .frame(width: 40, height: 40)
+                
+                if let url = URL(string: coin.image) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 34, height: 34)
+                                .clipShape(Circle())
+                        case .empty:
+                            ProgressView()
+                                .frame(width: 34, height: 34)
+                        case .failure:
+                            Image(systemName: "bitcoinsign.circle.fill")
+                                .resizable()
+                                .scaledToFit()
+                                .foregroundColor(AppColorsTheme.gold)
+                                .frame(width: 34, height: 34)
+                        @unknown default:
+                            EmptyView()
+                        }
+                    }
+                } else {
+                    Image(systemName: "bitcoinsign.circle.fill")
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundColor(AppColorsTheme.gold)
+                        .frame(width: 34, height: 34)
+                }
+            }
+            
+            // Coin adı ve sembol
+            VStack(alignment: .leading, spacing: 4) {
+                Text(coin.name)
+                    .foregroundColor(.white)
+                    .font(.system(size: 16, weight: .semibold))
+                    .lineLimit(1)
+                
+                Text(coin.symbol.uppercased())
+                    .foregroundColor(.gray)
+                    .font(.system(size: 14))
+            }
+            
+            Spacer()
+            
+            // Fiyat bilgisi
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(coin.formattedPrice)
+                    .foregroundColor(.white)
+                    .font(.system(size: 16, weight: .semibold))
+                
+                // Değişim yüzdesi için geliştirilmiş görünüm
+                HStack(spacing: 2) {
+                    // Seçilen zaman aralığına göre doğru değişim değerini al
+                    let changeValue = getChangeValueForTimeFrame(coin: coin)
+                    
+                    Image(systemName: changeValue >= 0 ? "arrow.up" : "arrow.down")
+                        .font(.system(size: 10))
+                        .foregroundColor(changeValue >= 0 ? .green : .red)
+                    
+                    Text(String(format: "%.1f%%", abs(changeValue)))
+                        .foregroundColor(changeValue >= 0 ? .green : .red)
+                        .font(.system(size: 14, weight: .medium))
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(getChangeValueForTimeFrame(coin: coin) >= 0 ? Color.green.opacity(0.15) : Color.red.opacity(0.15))
+                )
+            }
+        }
+        .padding()
+        .background(Color(UIColor.systemGray6).opacity(0.2))
+        .cornerRadius(12)
+    }
+    
+    // Zaman aralığına göre değişim değerini getiren yardımcı fonksiyon
+    private func getChangeValueForTimeFrame(coin: Coin) -> Double {
+        switch timeframeParam {
+        case "1h":
+            return coin.changeHour
+        case "7d":
+            return coin.changeWeek 
+        case "30d":
+            return coin.changeMonth
+        default:
+            return coin.change24h
+        }
+    }
+    
+    private func loadCoins() {
+        isLoading = true
+        errorMessage = nil
+        
+        Task {
+            await loadCoinsAsync()
+        }
+    }
+    
+    @MainActor
+    private func loadCoinsAsync() async {
+        do {
+            // Gerçek zaman aralığı parametresini kullan
+            print("Seçilen zaman aralığı: \(timeframeParam)")
+            
+            // Timeframe parametresini API'ye geçir
+            let response = try await APIService.shared.fetchCoins(
+                page: 1, 
+                perPage: 100,
+                priceChangePercentage: timeframeParam
+            )
+            
+            self.coins = response.coins
+            filterAndSortCoins()
+            isLoading = false
+        } catch {
+            print("Coin verileri yüklenemedi: \(error)")
+            errorMessage = "Coin verileri yüklenirken bir hata oluştu"
+            isLoading = false
+        }
+    }
+    
+    private func filterAndSortCoins() {
+        // Zaman aralığına göre değişim alanını belirle
+        let changeField: KeyPath<Coin, Double>
+        
+        // Zaman aralığına göre doğru değişim alanını seç
+        switch timeframeParam {
+        case "1h":
+            changeField = \.changeHour
+        case "7d":
+            changeField = \.changeWeek
+        case "30d":
+            changeField = \.changeMonth
+        default:
+            changeField = \.change24h
+        }
+        
+        // Seçilen değişim alanına göre sırala
+        if isShowingGainers {
+            // Yükselenler - büyükten küçüğe sırala
+            coins.sort { $0[keyPath: changeField] > $1[keyPath: changeField] }
+        } else {
+            // Düşenler - küçükten büyüğe sırala
+            coins.sort { $0[keyPath: changeField] < $1[keyPath: changeField] }
+        }
     }
 }
 
@@ -1971,7 +2247,7 @@ struct MainTabView: View {
             PortfolioView(showingLoginView: $showingLoginView)
                 .tabItem {
                     Image(systemName: "chart.pie.fill")
-                    Text("Portfolio")
+                    Text("Piyasa")
                 }
             
             CommunityView(showingLoginView: $showingLoginView)
