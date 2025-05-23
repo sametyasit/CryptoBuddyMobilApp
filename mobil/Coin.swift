@@ -11,6 +11,11 @@ struct Coin: Identifiable, Codable {
     let image: String
     let rank: Int
     
+    // Farklı zaman aralıkları için değişim değerleri
+    var changeHour: Double = 0
+    var changeWeek: Double = 0
+    var changeMonth: Double = 0
+    
     // Ek veri alanları
     var totalVolume: Double = 0
     var high24h: Double = 0
@@ -29,6 +34,7 @@ struct Coin: Identifiable, Codable {
     enum CodingKeys: String, CodingKey {
         case id, name, symbol, price, change24h, marketCap, image, rank
         case totalVolume, high24h, low24h, priceChange24h, ath, athChangePercentage
+        case changeHour, changeWeek, changeMonth
     }
     
     var formattedPrice: String {
@@ -55,6 +61,22 @@ struct Coin: Identifiable, Codable {
     
     var formattedChange: String {
         return String(format: "%.1f%%", change24h)
+    }
+    
+    // Zaman aralığına göre değişim değerini formatla
+    func formattedChangeForTimeFrame(timeFrame: String) -> String {
+        let value: Double
+        switch timeFrame {
+        case "1h":
+            value = changeHour
+        case "7d":
+            value = changeWeek
+        case "30d":
+            value = changeMonth
+        default:
+            value = change24h
+        }
+        return String(format: "%.1f%%", value)
     }
     
     var formattedVolume: String {
