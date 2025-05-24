@@ -1,9 +1,17 @@
 import SwiftUI
+import UIKit // UIImage için gerekli
 
 // MARK: - CoinCellView Bileşeni
 struct CoinCellView: View {
     let coin: Coin
     let displayRank: Int
+    
+    // Logoyu göstermek için state değişkeni
+    @State private var logoImage: UIImage? = nil
+    @State private var isLoadingLogo: Bool = false
+    
+    // Önbellek için uygulama genelinde kullanılabilecek NSCache
+    private static let imageCache = NSCache<NSString, UIImage>()
     
     init(coin: Coin, displayRank: Int) {
         self.coin = coin
@@ -20,15 +28,33 @@ struct CoinCellView: View {
             
             // Logo ve isim
             HStack(spacing: 8) {
-                // Logo görünümü - Basit dairesel placeholder
-                Circle()
-                    .fill(coinColor)
-                    .frame(width: 30, height: 30)
-                    .overlay(
-                        Text(coin.symbol.prefix(1).uppercased())
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
-                    )
+                // Logo görünümü - Önbellekten veya varsayılan
+                if let logoImage = logoImage {
+                    // Önbellekten logo göster
+                    Image(uiImage: logoImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 30, height: 30)
+                        .clipShape(Circle())
+                } else {
+                    // Yükleme durumu veya varsayılan renk göster
+                    ZStack {
+                        Circle()
+                            .fill(coinColor)
+                            .frame(width: 30, height: 30)
+                            .overlay(
+                                Text(coin.symbol.prefix(1).uppercased())
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(.white)
+                            )
+                        
+                        if isLoadingLogo {
+                            Circle()
+                                .stroke(Color.gray.opacity(0.5), lineWidth: 2)
+                                .frame(width: 30, height: 30)
+                        }
+                    }
+                }
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(coin.name)
@@ -64,6 +90,52 @@ struct CoinCellView: View {
         }
         .padding(.vertical, 8)
         .background(Color.black.opacity(0.001)) // Daha iyi tap alanı için
+        .onAppear(perform: loadLogo)
+    }
+    
+    // Logo yükleme fonksiyonu
+    private func loadLogo() {
+        // Önbellek anahtarı
+        let cacheKey = "\(coin.id)_\(coin.symbol)_logo" as NSString
+        
+        // Önbellekten logoyu al
+        if let cachedImage = CoinCellView.imageCache.object(forKey: cacheKey) {
+            self.logoImage = cachedImage
+            return
+        }
+        
+        // URL'den logoya erişmeyi dene
+        guard let imageUrl = URL(string: coin.image) else { return }
+        
+        isLoadingLogo = true
+        
+        // Arka planda yükleme yap
+        URLSession.shared.dataTask(with: imageUrl) { data, response, error in
+            // Yükleme durumunu kapat
+            DispatchQueue.main.async {
+                self.isLoadingLogo = false
+            }
+            
+            // Hata kontrolü
+            guard error == nil else {
+                print("⚠️ Logo yüklenirken hata: \(error!.localizedDescription)")
+                return
+            }
+            
+            // Data kontrolü
+            guard let data = data else { return }
+            
+            // UIImage oluştur
+            guard let image = UIImage(data: data) else { return }
+            
+            // Önbelleğe ekle
+            CoinCellView.imageCache.setObject(image, forKey: cacheKey)
+            
+            // UI'ı güncelle
+            DispatchQueue.main.async {
+                self.logoImage = image
+            }
+        }.resume()
     }
     
     // Coin sembolüne göre renk oluştur

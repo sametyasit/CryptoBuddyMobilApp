@@ -8,6 +8,10 @@ struct ContentView: View {
             .onAppear {
                 // APIService'e networkMonitor'u ver
                 APIService.shared.configure(with: networkMonitor)
+                
+                // LogoPreloader AppDelegate'de zaten başlatılıyor
+                // Burada sadece log göster
+                print("📱 ContentView: Uygulama başlatıldı")
             }
     }
 }

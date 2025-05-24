@@ -13,6 +13,32 @@ final class CoinListViewModel: ObservableObject {
     private let coinsPerPage = 30
     private let maxCoins = 1000
     
+    // Logo preloader reference
+    private let logoPreloader = LogoPreloader.shared
+    
+    init() {
+        // Listen for notifications when logos are preloaded
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleLogoPreloaded),
+            name: LogoPreloader.logoPreloadedNotification,
+            object: nil
+        )
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+    
+    @objc private func handleLogoPreloaded(_ notification: Notification) {
+        // Trigger UI update when a logo is loaded
+        DispatchQueue.main.async {
+            // We don't need to do anything specific here,
+            // the notification will trigger any SwiftUI views
+            // to refresh if they're observing the model
+        }
+    }
+    
     @MainActor
     func fetchCoins() async {
         isLoading = true
@@ -36,9 +62,8 @@ final class CoinListViewModel: ObservableObject {
             
             // Logo önbelleğe alma - arka planda yapılacak
             if !coins.isEmpty {
-                Task.detached(priority: .background) {
-                    imageCacheHelper.preloadCoinLogos(for: fetchResult.coins)
-                }
+                // Geliştirilen logo preloader'ı kullan
+                logoPreloader.preloadLogos(for: fetchResult.coins)
             }
             
         } catch APIService.APIError.allAPIsFailed {
@@ -73,9 +98,8 @@ final class CoinListViewModel: ObservableObject {
             
             // Yeni yüklenen coinlerin logolarını arka planda önbelleğe al
             if !newCoins.isEmpty {
-                Task.detached(priority: .background) {
-                    imageCacheHelper.preloadCoinLogos(for: newCoins)
-                }
+                // Geliştirilen logo preloader'ı kullan
+                logoPreloader.preloadLogos(for: newCoins)
             }
             
         } catch {

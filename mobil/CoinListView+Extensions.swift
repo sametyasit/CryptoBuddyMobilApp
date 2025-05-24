@@ -16,6 +16,9 @@ struct CoinCellView2: View {
     let coin: Coin
     let displayRank: Int
     
+    // Logoyu göstermek için state değişkeni
+    @State private var logoImage: UIImage? = nil
+    
     var body: some View {
         HStack(spacing: 5) {
             // Sıralama
@@ -26,15 +29,25 @@ struct CoinCellView2: View {
             
             // Logo ve isim
             HStack(spacing: 8) {
-                // Logo görünümü - Basit dairesel placeholder
-                Circle()
-                    .fill(coinColor)
-                    .frame(width: 30, height: 30)
-                    .overlay(
-                        Text(coin.symbol.prefix(1).uppercased())
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
-                    )
+                // Logo görünümü - Önbellekten veya varsayılan
+                if let logoImage = logoImage {
+                    // Önbellekten logo göster
+                    Image(uiImage: logoImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 30, height: 30)
+                        .clipShape(Circle())
+                } else {
+                    // Varsayılan renk göster
+                    Circle()
+                        .fill(coinColor)
+                        .frame(width: 30, height: 30)
+                        .overlay(
+                            Text(coin.symbol.prefix(1).uppercased())
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                        )
+                }
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(coin.name)
@@ -70,6 +83,32 @@ struct CoinCellView2: View {
         }
         .padding(.vertical, 8)
         .background(Color.black.opacity(0.001)) // Daha iyi tap alanı için
+        .onAppear(perform: loadLogo)
+        .onReceive(NotificationCenter.default.publisher(for: LogoPreloader.logoPreloadedNotification)) { notification in
+            // Logo yüklendiğinde güncellemek için
+            if let coinId = notification.object as? String, coinId == coin.id {
+                loadLogo()
+            }
+        }
+    }
+    
+    // Logo yükleme fonksiyonu
+    private func loadLogo() {
+        // Önbellek anahtarı
+        let cacheKey = "\(coin.id)_\(coin.symbol)_logo"
+        
+        // Önbellekten logoyu al
+        if let cachedImage = ImageCache.shared.getImage(forKey: cacheKey) {
+            self.logoImage = cachedImage
+            return
+        }
+        
+        // Alternatif anahtarları dene
+        let altCacheKey = "\(coin.id)_logo"
+        if let altCachedImage = ImageCache.shared.getImage(forKey: altCacheKey) {
+            self.logoImage = altCachedImage
+            return
+        }
     }
     
     // Coin sembolüne göre renk oluştur

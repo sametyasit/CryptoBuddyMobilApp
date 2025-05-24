@@ -1,3 +1,5 @@
+import SwiftUI
+
 struct MarketView: View {
     @Binding var showingLoginView: Bool
     
@@ -18,5 +20,9 @@ struct MarketView: View {
                 }
         }
         .navigationViewStyle(StackNavigationViewStyle())
+        .onAppear {
+            // Logo önbelleğe alma AppDelegate'de yapılıyor
+            print("📱 MarketView açıldı")
+        }
     }
 } 
