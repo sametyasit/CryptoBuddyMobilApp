@@ -165,6 +165,7 @@ struct MultiCoinListView: View {
 struct CoinRow: View {
     let coin: Coin
     let displayRank: Int
+    @State private var logoImage: UIImage? = nil
     
     init(coin: Coin, displayRank: Int? = nil) {
         self.coin = coin
@@ -180,31 +181,25 @@ struct CoinRow: View {
                     .foregroundColor(.gray)
                     .frame(width: 30, alignment: .center)
                 
-                CachedAsyncImage(url: URL(string: coin.image)) { phase in
-                    switch phase {
-                    case .empty:
-                        Circle()
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 30, height: 30)
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 30, height: 30)
-                    case .failure:
-                        Circle()
-                            .fill(Color.gray.opacity(0.2))
-                            .frame(width: 30, height: 30)
-                            .overlay(
-                                Image(systemName: "questionmark")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.gray)
-                            )
-                    @unknown default:
-                        EmptyView()
-                    }
+                // Logo görünümü - önbellekten veya varsayılan
+                if let logoImage = logoImage {
+                    // Önbellekten logo göster
+                    Image(uiImage: logoImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 30, height: 30)
+                        .clipShape(Circle())
+                } else {
+                    // Varsayılan görünüm
+                    Circle()
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 30, height: 30)
+                        .overlay(
+                            Text(coin.symbol.prefix(1).uppercased())
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                        )
                 }
-                .frame(width: 30, height: 30)
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(coin.name)
@@ -238,6 +233,45 @@ struct CoinRow: View {
             .frame(width: 80, alignment: .trailing)
         }
         .padding(.vertical, 4)
+        .onAppear(perform: loadLogo)
+        .onReceive(NotificationCenter.default.publisher(for: LogoPreloader.logoPreloadedNotification)) { notification in
+            // Logo yüklendiğinde güncellemek için
+            if let coinId = notification.object as? String, coinId == coin.id {
+                loadLogo()
+            }
+        }
+    }
+    
+    // Logo yükleme fonksiyonu
+    private func loadLogo() {
+        // Önbellek anahtarı
+        let cacheKey = "\(coin.id)_\(coin.symbol)_logo"
+        
+        // Önbellekten logoyu al
+        if let cachedImage = ImageCache.shared.getImage(forKey: cacheKey) {
+            self.logoImage = cachedImage
+            return
+        }
+        
+        // Alternatif anahtarları dene
+        let altCacheKey = "\(coin.id)_logo"
+        if let altCachedImage = ImageCache.shared.getImage(forKey: altCacheKey) {
+            self.logoImage = altCachedImage
+            return
+        }
+        
+        // Eğer önbellekte yoksa ve image URL'si geçerliyse, önbelleğe almak için URLSession kullan
+        if let url = URL(string: coin.image) {
+            URLSession.shared.dataTask(with: url) { data, response, error in
+                if let data = data, let image = UIImage(data: data) {
+                    DispatchQueue.main.async {
+                        self.logoImage = image
+                        // Önbelleğe kaydet
+                        ImageCache.shared.setImage(image, forKey: cacheKey)
+                    }
+                }
+            }.resume()
+        }
     }
 }
 
@@ -329,6 +363,7 @@ class MultiCoinViewModel: ObservableObject {
     private let apiService = APIService.shared
     private var currentPage = 1
     private let coinsPerPage = 100 // 20'den 100'e çıkarıyoruz - daha çok coin yüklenecek
+    private let logoPreloader = LogoPreloader.shared
     
     // Initialize and load coins
     init() {
@@ -421,6 +456,9 @@ class MultiCoinViewModel: ObservableObject {
                 allCoins = response.coins
                 hasMorePages = response.coins.count >= coinsPerPage
                 print("📊 Liste yenilendi: \(allCoins.count) coin")
+                
+                // Coin logolarını önbelleğe al
+                logoPreloader.preloadLogos(for: response.coins)
             } else {
                 // Gelen verileri incele
                 if response.coins.isEmpty {
@@ -445,6 +483,9 @@ class MultiCoinViewModel: ObservableObject {
                         // Yeni coinleri ekle
                         allCoins.append(contentsOf: uniqueNewCoins)
                         print("📊 Şu anki toplam coin sayısı: \(allCoins.count)")
+                        
+                        // Yeni eklenen coinlerin logolarını önbelleğe al
+                        logoPreloader.preloadLogos(for: uniqueNewCoins)
                         
                         // Toplam coin sayısı kontrol et
                         if allCoins.count >= 200 {
