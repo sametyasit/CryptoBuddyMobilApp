@@ -17,7 +17,7 @@ class PortfolioViewController: UIViewController {
     }()
     
     private let timeFrameControl: UISegmentedControl = {
-        let items = ["24s", "1h", "7g", "30g"]
+        let items = ["1s", "24s", "7g", "30g"]
         let segmentedControl = UISegmentedControl(items: items)
         segmentedControl.selectedSegmentIndex = 0
         segmentedControl.backgroundColor = UIColor(white: 0.15, alpha: 1.0)
