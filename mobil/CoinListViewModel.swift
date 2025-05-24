@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-class CoinListViewModel: ObservableObject {
+final class CoinListViewModel: ObservableObject {
     @Published var coins: [Coin] = []
     @Published var isLoading = false
     @Published var isLoadingMore = false
@@ -34,6 +34,13 @@ class CoinListViewModel: ObservableObject {
             
             print("📱 İlk sayfa yüklendi: \(coins.count) coin")
             
+            // Logo önbelleğe alma - arka planda yapılacak
+            if !coins.isEmpty {
+                Task.detached(priority: .background) {
+                    imageCacheHelper.preloadCoinLogos(for: fetchResult.coins)
+                }
+            }
+            
         } catch APIService.APIError.allAPIsFailed {
             errorMessage = "Hiçbir API kaynağından veri alınamadı. Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin."
         } catch APIService.APIError.rateLimitExceeded {
@@ -63,6 +70,13 @@ class CoinListViewModel: ObservableObject {
             
             // Daha fazla coin olup olmadığını kontrol edelim
             allPagesLoaded = newCoins.count < coinsPerPage || coins.count >= maxCoins
+            
+            // Yeni yüklenen coinlerin logolarını arka planda önbelleğe al
+            if !newCoins.isEmpty {
+                Task.detached(priority: .background) {
+                    imageCacheHelper.preloadCoinLogos(for: newCoins)
+                }
+            }
             
         } catch {
             errorMessage = "Daha fazla coin yüklenirken bir hata oluştu: \(error.localizedDescription)"
