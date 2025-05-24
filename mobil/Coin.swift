@@ -48,7 +48,9 @@ struct Coin: Identifiable, Codable {
     }
     
     var formattedMarketCap: String {
-        if marketCap >= 1_000_000_000_000 {
+        if marketCap <= 0 {
+            return "Bilinmiyor"
+        } else if marketCap >= 1_000_000_000_000 {
             return String(format: "$%.2fT", marketCap / 1_000_000_000_000)
         } else if marketCap >= 1_000_000_000 {
             return String(format: "$%.2fB", marketCap / 1_000_000_000)
@@ -67,11 +69,11 @@ struct Coin: Identifiable, Codable {
     func formattedChangeForTimeFrame(timeFrame: String) -> String {
         let value: Double
         switch timeFrame {
-        case "1h":
+        case "1s":
             value = changeHour
-        case "7d":
+        case "7g":
             value = changeWeek
-        case "30d":
+        case "30g":
             value = changeMonth
         default:
             value = change24h
@@ -80,7 +82,9 @@ struct Coin: Identifiable, Codable {
     }
     
     var formattedVolume: String {
-        if totalVolume >= 1_000_000_000 {
+        if totalVolume <= 0 {
+            return "Bilinmiyor"
+        } else if totalVolume >= 1_000_000_000 {
             return String(format: "$%.2fB", totalVolume / 1_000_000_000)
         } else if totalVolume >= 1_000_000 {
             return String(format: "$%.2fM", totalVolume / 1_000_000)
@@ -90,18 +94,44 @@ struct Coin: Identifiable, Codable {
     }
     
     var formattedHigh24h: String {
-        return String(format: "$%.2f", high24h)
+        if high24h <= 0 {
+            return formattedPrice // Veri yoksa mevcut fiyatı göster
+        }
+        
+        if high24h < 1 {
+            return String(format: "$%.4f", high24h)
+        } else if high24h < 10 {
+            return String(format: "$%.3f", high24h)
+        } else {
+            return String(format: "$%.2f", high24h)
+        }
     }
     
     var formattedLow24h: String {
-        return String(format: "$%.2f", low24h)
+        if low24h <= 0 {
+            return formattedPrice // Veri yoksa mevcut fiyatı göster
+        }
+        
+        if low24h < 1 {
+            return String(format: "$%.4f", low24h)
+        } else if low24h < 10 {
+            return String(format: "$%.3f", low24h)
+        } else {
+            return String(format: "$%.2f", low24h)
+        }
     }
     
     var formattedAth: String {
-        if ath >= 1_000_000 {
+        if ath <= 0 {
+            return "Bilinmiyor"
+        } else if ath >= 1_000_000 {
             return String(format: "$%.2fM", ath / 1_000_000)
         } else if ath >= 1_000 {
             return String(format: "$%.2fK", ath / 1_000)
+        } else if ath < 1 {
+            return String(format: "$%.4f", ath)
+        } else if ath < 10 {
+            return String(format: "$%.3f", ath)
         } else {
             return String(format: "$%.2f", ath)
         }
