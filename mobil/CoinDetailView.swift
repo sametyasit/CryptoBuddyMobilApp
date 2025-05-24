@@ -1,6 +1,7 @@
 import SwiftUI
 import SafariServices
 import Charts
+import UIKit
 
 struct CoinDetailView: View {
     let coinId: String
@@ -10,23 +11,23 @@ struct CoinDetailView: View {
     @State private var selectedNewsURL: URL? = URL(string: "https://example.com")
     @State private var showingSafari = false
     @State private var graphData: [GraphPoint] = []
-    @State private var selectedTimeFrame: TimeFrame = .week
+    @State private var selectedTimeFrame: TimeFrame = .day
     @State private var isLoadingGraph = false
     
     enum TimeFrame: String, CaseIterable, Identifiable {
+        case hour = "1s"
         case day = "24s"
         case week = "7g"
         case month = "30g"
-        case year = "1y"
         
         var id: String { self.rawValue }
         
         var days: Int {
             switch self {
+            case .hour: return 1
             case .day: return 1
             case .week: return 7
             case .month: return 30
-            case .year: return 365
             }
         }
     }
@@ -73,63 +74,7 @@ struct CoinDetailView: View {
                 ScrollView {
                     VStack(spacing: 20) {
                         // Coin Başlık Bilgisi
-                        HStack(spacing: 15) {
-                            // Logo
-                            if let url = URL(string: coin.image) {
-                                AsyncImage(url: url) { phase in
-                                    switch phase {
-                                    case .success(let image):
-                                        image
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(width: 60, height: 60)
-                                            .clipShape(Circle())
-                                    case .empty, .failure:
-                                        Image(systemName: "bitcoinsign.circle.fill")
-                                            .resizable()
-                                            .scaledToFit()
-                                            .frame(width: 60, height: 60)
-                                            .foregroundColor(AppColorsTheme.gold)
-                                    @unknown default:
-                                        EmptyView()
-                                    }
-                                }
-                            } else {
-                                Image(systemName: "bitcoinsign.circle.fill")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 60, height: 60)
-                                    .foregroundColor(AppColorsTheme.gold)
-                            }
-                            
-                            // İsim ve fiyat
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(coin.name)
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.white)
-                                
-                                Text(coin.symbol.uppercased())
-                                    .font(.headline)
-                                    .foregroundColor(.gray)
-                            }
-                            
-                            Spacer()
-                            
-                            // Fiyat ve değişim
-                            VStack(alignment: .trailing, spacing: 5) {
-                                Text(coin.formattedPrice)
-                                    .font(.headline)
-                                    .foregroundColor(.white)
-                                
-                                Text(coin.formattedChange)
-                                    .font(.subheadline)
-                                    .foregroundColor(coin.change24h >= 0 ? .green : .red)
-                            }
-                        }
-                        .padding()
-                        .background(Color(UIColor.darkGray).opacity(0.3))
-                        .cornerRadius(15)
+                        CoinHeaderView(coin: coin)
                         
                         // Fiyat Grafiği
                         VStack(alignment: .leading, spacing: 10) {
@@ -709,6 +654,49 @@ struct NewsItemRow: View {
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter
+    }
+}
+
+struct CoinHeaderView: View {
+    let coin: Coin
+    
+    var body: some View {
+        HStack {
+            // Logo - Geliştirilmiş logo yükleme mekanizması
+            CoinLogoView(
+                coinId: coin.id,
+                urlString: coin.image,
+                symbol: coin.symbol,
+                size: 60
+            )
+            
+            VStack(alignment: .leading) {
+                Text(coin.name)
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                
+                Text(coin.symbol)
+                    .font(.headline)
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing) {
+                Text(coin.formattedPrice)
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
+                
+                Text(coin.formattedChange)
+                    .font(.headline)
+                    .foregroundColor(coin.change24h >= 0 ? .green : .red)
+            }
+        }
+        .padding()
+        .background(AppColorsTheme.darkGray.opacity(0.3))
+        .cornerRadius(15)
     }
 }
 
