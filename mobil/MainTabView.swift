@@ -926,23 +926,23 @@ struct CoinDetailView: View {
     @State private var showingSafari = false
     @State private var selectedNewsURL: URL? = URL(string: "https://example.com")
     @State private var errorMessage: String? = nil
-    @State private var selectedChartPeriod: ChartPeriod = .week
+    @State private var selectedChartPeriod: ChartPeriod = .hour
     @State private var retryCount = 0
     @State private var showFullDescription = false
     @State private var isAppearing = false
     
     enum ChartPeriod: String, CaseIterable {
+        case hour = "1s"
         case day = "24s"
-        case week = "1h"
-        case month = "1a"
-        case year = "1y"
+        case week = "7g"
+        case month = "30g"
         
         var days: Int {
             switch self {
+            case .hour: return 1
             case .day: return 1
             case .week: return 7
             case .month: return 30
-            case .year: return 365
             }
         }
     }
@@ -1132,7 +1132,7 @@ struct CoinDetailView: View {
         }
     }
     
-    private func loadPriceHistory(for coinId: String, period: ChartPeriod = .week) {
+    private func loadPriceHistory(for coinId: String, period: ChartPeriod = .hour) {
         Task {
             do {
                 print("📈 Fiyat geçmişi alınıyor: \(coinId) - \(period.rawValue)")
@@ -1852,8 +1852,8 @@ struct PortfolioView: View {
     @State private var timeframeParam = "24h"
     
     // Farklı zaman aralıkları için string parametreleri
-    var timeFrames = ["24s", "1h", "7g", "30g"]
-    var timeFrameParams = ["24h", "1h", "7d", "30d"]
+    var timeFrames = ["1s", "24s", "7g", "30g"]
+    var timeFrameParams = ["1h", "24h", "7d", "30d"]
     
     var body: some View {
         NavigationView {
