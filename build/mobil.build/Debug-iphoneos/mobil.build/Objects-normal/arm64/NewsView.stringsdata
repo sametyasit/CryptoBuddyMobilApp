@@ -1,0 +1,72 @@
+{
+  "source": "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/NewsView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Haberler",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 97
+        }
+      },
+      {
+        "comment": "",
+        "key": "Haberler yükleniyor...",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 39
+        }
+      },
+      {
+        "comment": "",
+        "key": "Haberler yüklenemedi",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 48
+        }
+      },
+      {
+        "comment": "",
+        "key": "Haberlerde ara...",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 25
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tekrar Dene",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 60
+        }
+      },
+      {
+        "comment": "",
+        "key": "Haber bulunamadı",
+        "location": {
+          "startingColumn": 67,
+          "startingLine": 85
+        }
+      },
+      {
+        "comment": "",
+        "key": "Aramanızla eşleşen haber bulunamadı",
+        "location": {
+          "startingColumn": 89,
+          "startingLine": 85
+        }
+      },
+      {
+        "comment": "",
+        "key": "Safari'de Aç",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 103
+        }
+      }
+    ]
+  },
+  "version": 1
+}

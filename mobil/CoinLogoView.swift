@@ -65,6 +65,9 @@ struct CoinLogoView: View {
         alternativeURLs = [
             urlString, // Ana kaynak
             
+            // CryptoIcons API - Yeni ve daha güvenilir kaynak
+            "https://cryptoicons-api.vercel.app/api/icon/\(coinSymbol.lowercased())",
+            
             // CoinGecko alternatifleri
             "https://assets.coingecko.com/coins/images/\(coinIdLower)/large/\(coinSymbol).png",
             "https://assets.coingecko.com/coins/images/\(coinIdLower)/thumb/\(coinSymbol).png",
@@ -73,6 +76,7 @@ struct CoinLogoView: View {
             // CoinMarketCap alternatifleri
             "https://s2.coinmarketcap.com/static/img/coins/64x64/\(coinIdLower).png",
             "https://s2.coinmarketcap.com/static/img/coins/128x128/\(coinIdLower).png",
+            "https://s2.coinmarketcap.com/static/img/coins/200x200/\(coinIdLower).png",
             
             // CoinCap alternatifleri
             "https://assets.coincap.io/assets/icons/\(coinSymbol)@2x.png",
@@ -88,14 +92,24 @@ struct CoinLogoView: View {
             "https://cryptologos.cc/logos/\(coinIdLower)-\(coinSymbol)-logo.png",
             "https://lcw.nyc3.cdn.digitaloceanspaces.com/production/currencies/64/\(coinSymbol).png",
             "https://coinicons-api.vercel.app/api/icon/\(coinSymbol)",
-            "https://cryptoicon-api.vercel.app/api/icon/\(coinSymbol)",
             "https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@master/128/color/\(coinSymbol).png",
             "https://cdn.jsdelivr.net/gh/atomiclabs/cryptocurrency-icons@master/32/color/\(coinSymbol).png",
             
             // ID tabanlı alternatifler
             "https://static.coincap.io/assets/icons/\(coinIdLower)@2x.png",
             "https://static.coinstats.app/coins/\(coinIdLower)@2x.png",
-            "https://api.coinpaprika.com/coin/\(coinIdLower)/logo.png"
+            "https://api.coinpaprika.com/coin/\(coinIdLower)/logo.png",
+            
+            // CoinPaprika ID tabanlı alternatifler
+            "https://static.coinpaprika.com/coin/\(coinIdLower)/logo.png",
+            
+            // CryptoCompare
+            "https://www.cryptocompare.com/media/\(coinIdLower)/\(coinSymbol).png",
+            "https://www.cryptocompare.com/media/\(coinSymbol)/\(coinSymbol).png",
+            
+            // Yeni eklenen modern API kaynakları
+            "https://cdn.coinranking.com/assets/coins/\(coinSymbol.lowercased()).svg",
+            "https://cdn.coinranking.com/assets/coins/\(coinSymbol.lowercased()).png"
         ]
         
         // Bitcoin için özel alternatifler
@@ -173,8 +187,22 @@ struct CoinLogoView: View {
             return
         }
         
-        // Zaman aşımı ekleyerek ImageCache kullanarak yükle
-        let task = URLSession.shared.dataTask(with: url) { data, response, error in
+        // Request oluştur
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 5 // 5 saniye timeout
+        request.setValue("image/*", forHTTPHeaderField: "Accept")
+        
+        // Zaman aşımı ekleyerek URLSession kullanarak yükle
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            // HTTP yanıt kontrolü
+            if let httpResponse = response as? HTTPURLResponse {
+                // 200 OK dışındaki yanıtları reddet
+                if httpResponse.statusCode != 200 {
+                    tryNextLogoSource()
+                    return
+                }
+            }
+            
             if let data = data, let image = UIImage(data: data) {
                 DispatchQueue.main.async {
                     // Başarılı yüklemeyi önbelleğe kaydet
@@ -192,18 +220,17 @@ struct CoinLogoView: View {
             }
         }
         
-        // 5 saniye zaman aşımı ekle
-        let timeoutTask = DispatchWorkItem {
-            task.cancel()
-            // Zaman aşımı, sonraki kaynağı dene
-            tryNextLogoSource()
-        }
-        
-        // Zaman aşımını başlat
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: timeoutTask)
-        
         // İndirme görevini başlat
         task.resume()
+        
+        // 5 saniye zaman aşımı ekle
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+            if task.state == .running {
+                task.cancel()
+                // Zaman aşımı, sonraki kaynağı dene
+                tryNextLogoSource()
+            }
+        }
     }
     
     // Coin sembolünden tutarlı bir renk üret - Daha canlı renkler için iyileştirildi

@@ -1,0 +1,178 @@
+{
+  "" : {
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/mobil-master.dia",
+    "emit-module-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/mobil-master-emit-module.d",
+    "emit-module-diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/mobil-master-emit-module.dia",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/mobil-master.swiftdeps"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/DerivedSources/GeneratedAssetSymbols.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/GeneratedAssetSymbols.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/GeneratedAssetSymbols.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/GeneratedAssetSymbols.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/GeneratedAssetSymbols.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/GeneratedAssetSymbols.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/GeneratedAssetSymbols~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/APIService.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/AppDelegate.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/AppDelegate.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/AppDelegate.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/AppDelegate.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/AppDelegate.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/AppDelegate.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/AppDelegate.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/AppDelegate.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/AppDelegate~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/Coin.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Coin.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Coin.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Coin.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Coin.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Coin.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Coin.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Coin.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Coin~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/CoinListView.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CoinListView.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CoinListView.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CoinListView.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CoinListView.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CoinListView.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CoinListView.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CoinListView.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CoinListView~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/Colors.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Colors.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Colors.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Colors.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Colors.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Colors.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Colors.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Colors.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/Colors~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/ContentView.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ContentView.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ContentView.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ContentView.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ContentView.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ContentView.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ContentView.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ContentView.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ContentView~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/CryptoBuddyApp.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CryptoBuddyApp.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CryptoBuddyApp.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CryptoBuddyApp.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CryptoBuddyApp.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CryptoBuddyApp.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CryptoBuddyApp.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CryptoBuddyApp.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/CryptoBuddyApp~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/LoginView.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/LoginView.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/LoginView.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/LoginView.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/LoginView.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/LoginView.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/LoginView.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/LoginView.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/LoginView~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/MainTabView.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/MainTabView.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/MainTabView.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/MainTabView.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/MainTabView.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/MainTabView.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/MainTabView.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/MainTabView.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/MainTabView~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/Models/NewsItem.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/NewsView.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsView.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsView.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsView.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsView.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsView.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsView.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsView.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsView~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/ProfileView.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ProfileView.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ProfileView.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ProfileView.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ProfileView.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ProfileView.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ProfileView.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ProfileView.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ProfileView~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/SceneDelegate.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SceneDelegate.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SceneDelegate.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SceneDelegate.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SceneDelegate.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SceneDelegate.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SceneDelegate.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SceneDelegate.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SceneDelegate~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/SearchViewModel.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/SignUpView.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SignUpView.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SignUpView.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SignUpView.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SignUpView.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SignUpView.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SignUpView.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SignUpView.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SignUpView~partial.swiftmodule"
+  },
+  "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/ViewController.swift" : {
+    "const-values" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ViewController.swiftconstvalues",
+    "dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ViewController.d",
+    "diagnostics" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ViewController.dia",
+    "index-unit-output-path" : "/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ViewController.o",
+    "llvm-bc" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ViewController.bc",
+    "object" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ViewController.o",
+    "swift-dependencies" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ViewController.swiftdeps",
+    "swiftmodule" : "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/ViewController~partial.swiftmodule"
+  }
+}

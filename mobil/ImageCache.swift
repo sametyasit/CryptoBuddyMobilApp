@@ -102,12 +102,39 @@ class ImageCache {
             guard let self = self else { return }
             
             for coin in topCoins {
-                // Logoları yüklerken bir dizi farklı olası URL'yi dene
+                let coinSymbol = coin.symbol.lowercased()
+                let coinIdLower = coin.id.lowercased()
+                
+                // Logoları yüklerken daha kapsamlı URL listesi
                 let possibleURLs = [
                     coin.image, // Ana URL
-                    "https://assets.coingecko.com/coins/images/\(coin.id)/small/\(coin.symbol).png",
-                    "https://s2.coinmarketcap.com/static/img/coins/64x64/\(coin.id).png",
-                    "https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/32/color/\(coin.symbol.lowercased()).png"
+                    
+                    // Yeni eklenen güvenilir kaynak
+                    "https://cryptoicons-api.vercel.app/api/icon/\(coinSymbol)",
+                    
+                    // CoinGecko alternatifleri
+                    "https://assets.coingecko.com/coins/images/\(coinIdLower)/large/\(coinSymbol).png",
+                    "https://assets.coingecko.com/coins/images/\(coinIdLower)/thumb/\(coinSymbol).png",
+                    "https://assets.coingecko.com/coins/images/\(coinIdLower)/small/\(coinSymbol).png",
+                    
+                    // CoinMarketCap alternatifleri
+                    "https://s2.coinmarketcap.com/static/img/coins/64x64/\(coinIdLower).png",
+                    "https://s2.coinmarketcap.com/static/img/coins/128x128/\(coinIdLower).png",
+                    "https://s2.coinmarketcap.com/static/img/coins/200x200/\(coinIdLower).png",
+                    
+                    // CoinCap alternatifleri
+                    "https://assets.coincap.io/assets/icons/\(coinSymbol)@2x.png",
+                    "https://static.coincap.io/assets/icons/\(coinSymbol)@2x.png",
+                    
+                    // GitHub açık kaynak repo alternatifleri
+                    "https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/128/color/\(coinSymbol).png",
+                    "https://raw.githubusercontent.com/spothq/cryptocurrency-icons/master/32/color/\(coinSymbol).png",
+                    
+                    // CryptoCompare
+                    "https://www.cryptocompare.com/media/\(coinIdLower)/\(coinSymbol).png",
+                    
+                    // Yeni modern API kaynakları
+                    "https://coinicons-api.vercel.app/api/icon/\(coinSymbol)"
                 ]
                 
                 // Her coin için bir kez başarılı olunca diğerine geç
@@ -127,9 +154,19 @@ class ImageCache {
                     }
                     
                     // Değilse, indir ve önbelleğe al
+                    var request = URLRequest(url: url)
+                    request.timeoutInterval = 5
+                    request.setValue("image/*", forHTTPHeaderField: "Accept")
+                    
                     let semaphore = DispatchSemaphore(value: 0)
                     
-                    let task = URLSession.shared.dataTask(with: url) { data, response, error in
+                    let task = URLSession.shared.dataTask(with: request) { data, response, error in
+                        // HTTP yanıt kontrolü
+                        if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+                            semaphore.signal()
+                            return
+                        }
+                        
                         if let data = data, let image = UIImage(data: data) {
                             // Başarılı yüklemeyi önbelleğe kaydet
                             self.setImage(image, forKey: cacheKey)
@@ -140,8 +177,8 @@ class ImageCache {
                     
                     task.resume()
                     
-                    // En fazla 2 saniye bekle ve sonraki URL'ye geç
-                    _ = semaphore.wait(timeout: .now() + 2)
+                    // En fazla 3 saniye bekle ve sonraki URL'ye geç
+                    _ = semaphore.wait(timeout: .now() + 3)
                     
                     if logoLoaded {
                         break
@@ -251,80 +288,69 @@ class ImageCache {
                 return nil
             }
             
-            // Dosya geçerliliğini kontrol et
-            let attributes = try fileManager.attributesOfItem(atPath: fileURL.path)
-            if let modificationDate = attributes[.modificationDate] as? Date {
-                let expirationDate = modificationDate.addingTimeInterval(diskCacheTimeoutDays * 24 * 60 * 60)
-                if Date() > expirationDate {
-                    // Dosya süresi dolmuş, sil
-                    try fileManager.removeItem(at: fileURL)
-                    return nil
-                }
-            }
-            
-            // Dosyayı yükle
+            // Disk önbelleğindeki görseli yükle
             let data = try Data(contentsOf: fileURL)
             return UIImage(data: data)
         } catch {
-            print("Disk önbelleğinden görsel yüklenirken hata: \(error)")
+            print("Disk önbelleğinden yükleme hatası: \(error)")
             return nil
         }
     }
     
     private func saveImageToDiskCache(_ image: UIImage, for key: String) {
-        downloadQueue.async { [weak self] in
-            guard let self = self else { return }
+        do {
+            let fileURL = try fileURL(for: key)
             
-            do {
-                guard let data = image.jpegData(compressionQuality: 0.8) else { return }
-                let fileURL = try self.fileURL(for: key)
-                try data.write(to: fileURL)
-            } catch {
-                print("Görsel disk önbelleğine kaydedilirken hata: \(error)")
+            // Görseli PNG veya JPEG olarak kaydet
+            if let pngData = image.pngData() {
+                try pngData.write(to: fileURL)
+            } else if let jpegData = image.jpegData(compressionQuality: 0.9) {
+                try jpegData.write(to: fileURL)
             }
+        } catch {
+            print("Disk önbelleğine kaydetme hatası: \(error)")
         }
     }
     
     private func downloadImage(from url: URL, cacheKey: String, completion: @escaping (UIImage?) -> Void) {
         downloadQueue.async {
-            let task = URLSession.shared.dataTask(with: url) { data, response, error in
-                // HTTP yanıtını kontrol et
-                guard let httpResponse = response as? HTTPURLResponse,
-                      (200...299).contains(httpResponse.statusCode),
-                      let data = data,
-                      error == nil,
-                      let image = UIImage(data: data) else {
-                    DispatchQueue.main.async {
-                        completion(nil)
-                    }
+            let request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad, timeoutInterval: 15)
+            
+            let task = URLSession.shared.dataTask(with: request) { data, response, error in
+                if let error = error {
+                    print("Görsel indirme hatası: \(error.localizedDescription)")
+                    completion(nil)
                     return
                 }
                 
-                DispatchQueue.main.async {
-                    completion(image)
+                guard let data = data, let image = UIImage(data: data) else {
+                    completion(nil)
+                    return
                 }
+                
+                completion(image)
             }
+            
             task.resume()
         }
     }
     
     private func cleanExpiredDiskCache() {
-        downloadQueue.async { [weak self] in
+        diskCacheQueue.async { [weak self] in
             guard let self = self else { return }
             
             do {
                 let cacheURL = try self.diskCacheDirectoryURL()
                 let resourceKeys: [URLResourceKey] = [.contentModificationDateKey, .totalFileAllocatedSizeKey]
-                let contents = try self.fileManager.contentsOfDirectory(
-                    at: cacheURL,
-                    includingPropertiesForKeys: resourceKeys,
-                    options: .skipsHiddenFiles
-                )
+                let cacheContents = try self.fileManager.contentsOfDirectory(at: cacheURL, includingPropertiesForKeys: resourceKeys)
                 
-                // Son değişim tarihine göre dosyaları filtrele
+                // Disk önbelleğindeki eski dosyaları temizle
                 let expirationDate = Date().addingTimeInterval(-self.diskCacheTimeoutDays * 24 * 60 * 60)
-                for fileURL in contents {
+                
+                for fileURL in cacheContents {
                     let resourceValues = try fileURL.resourceValues(forKeys: Set(resourceKeys))
+                    
+                    // Dosya eski mi kontrol et
                     if let modificationDate = resourceValues.contentModificationDate,
                        modificationDate < expirationDate {
                         try self.fileManager.removeItem(at: fileURL)

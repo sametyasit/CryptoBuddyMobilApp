@@ -1,0 +1,18 @@
+"/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/SearchViewModel.swift":
+  swift-dependencies: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.swiftdeps"
+  dependencies: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.d"
+  diagnostics: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.dia"
+  const-values: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.swiftconstvalues"
+  object: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/SearchViewModel.o"
+"/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/Models/NewsItem.swift":
+  swift-dependencies: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.swiftdeps"
+  dependencies: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.d"
+  const-values: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.swiftconstvalues"
+  diagnostics: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.dia"
+  object: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/NewsItem.o"
+"/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/APIService.swift":
+  const-values: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.swiftconstvalues"
+  diagnostics: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.dia"
+  dependencies: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.d"
+  swift-dependencies: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.swiftdeps"
+  object: "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/build/mobil.build/Debug-iphoneos/mobil.build/Objects-normal/arm64/APIService.o"

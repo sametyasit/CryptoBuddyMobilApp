@@ -1,0 +1,472 @@
+{
+  "source": "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/MainTabView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Markets",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 345
+        }
+      },
+      {
+        "comment": "",
+        "key": "Giriş Yap",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 425
+        }
+      },
+      {
+        "comment": "",
+        "key": "Kullanıcı Adı",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 430
+        }
+      },
+      {
+        "comment": "",
+        "key": "Şifre",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 436
+        }
+      },
+      {
+        "comment": "",
+        "key": "Giriş Yap",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 441
+        }
+      },
+      {
+        "comment": "",
+        "key": "Kapat",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 481
+        }
+      },
+      {
+        "comment": "",
+        "key": "Demo Giriş:",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 465
+        }
+      },
+      {
+        "comment": "",
+        "key": "Kullanıcı Adı: demo",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 469
+        }
+      },
+      {
+        "comment": "",
+        "key": "Şifre: 123456",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 473
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hata",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 490
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tamam",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 492
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ara",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 703
+        }
+      },
+      {
+        "comment": "",
+        "key": "Kripto paralar yükleniyor...",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 550
+        }
+      },
+      {
+        "comment": "",
+        "key": "Kripto para ara...",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 522
+        }
+      },
+      {
+        "comment": "",
+        "key": "Haberler",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 623
+        }
+      },
+      {
+        "comment": "",
+        "key": "Coinler",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 560
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld sonuç",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 571
+        }
+      },
+      {
+        "comment": "",
+        "key": "Daha Fazla Sonuç",
+        "location": {
+          "startingColumn": 54,
+          "startingLine": 596
+        }
+      },
+      {
+        "comment": "",
+        "key": "Arama sonucu bulunamadı",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 648
+        }
+      },
+      {
+        "comment": "",
+        "key": "Farklı bir arama terimi deneyin veya daha fazla coin yükleyin",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 652
+        }
+      },
+      {
+        "comment": "",
+        "key": "Daha Fazla Coin Yükle",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 662
+        }
+      },
+      {
+        "comment": "",
+        "key": "Popüler Kripto Paralar",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 682
+        }
+      },
+      {
+        "comment": "",
+        "key": "Safari'de Aç",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 723
+        }
+      },
+      {
+        "comment": "",
+        "key": "Safari'de Aç",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 1025
+        }
+      },
+      {
+        "comment": "",
+        "key": "Kapat",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 1225
+        }
+      },
+      {
+        "comment": "",
+        "key": "Veriler yüklenemedi",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1273
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tekrar Dene",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 1284
+        }
+      },
+      {
+        "comment": "",
+        "key": "Coin bulunamadı",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1307
+        }
+      },
+      {
+        "comment": "",
+        "key": "ID: %@",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1312
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tekrar Dene",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 1318
+        }
+      },
+      {
+        "comment": "",
+        "key": "Fiyat Grafiği",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1454
+        }
+      },
+      {
+        "comment": "",
+        "key": "Market Bilgisi",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1497
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hakkında",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1527
+        }
+      },
+      {
+        "comment": "",
+        "key": "Daha Az Göster",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1539
+        }
+      },
+      {
+        "comment": "",
+        "key": "Daha Fazla Göster",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1552
+        }
+      },
+      {
+        "comment": "",
+        "key": "İlgili Haberler",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1614
+        }
+      },
+      {
+        "comment": "",
+        "key": "Haber bulunamadı",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 1620
+        }
+      },
+      {
+        "comment": "",
+        "key": "Yeterli veri yok",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1811
+        }
+      },
+      {
+        "comment": "",
+        "key": "Piyasa",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1954
+        }
+      },
+      {
+        "comment": "",
+        "key": "Coinler yükleniyor...",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1898
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hata: %@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1905
+        }
+      },
+      {
+        "comment": "",
+        "key": "Veri bulunamadı",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1919
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tekrar Dene",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 1908
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tekrar Dene",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 1922
+        }
+      },
+      {
+        "comment": "",
+        "key": "Filtreleme",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 1866
+        }
+      },
+      {
+        "comment": "",
+        "key": "Yükselenler",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1867
+        }
+      },
+      {
+        "comment": "",
+        "key": "Düşenler",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1868
+        }
+      },
+      {
+        "comment": "",
+        "key": "Zaman Aralığı",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 1879
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1967
+        }
+      },
+      {
+        "comment": "",
+        "key": "Community",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 2179
+        }
+      },
+      {
+        "comment": "",
+        "key": "Community View",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 2140
+        }
+      },
+      {
+        "comment": "",
+        "key": "Yorum yapmak için giriş yapmalısınız",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 2152
+        }
+      },
+      {
+        "comment": "",
+        "key": "Giriş Yap",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 2161
+        }
+      },
+      {
+        "comment": "",
+        "key": "Markets",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 2232
+        }
+      },
+      {
+        "comment": "",
+        "key": "News",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 2238
+        }
+      },
+      {
+        "comment": "",
+        "key": "Search",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 2244
+        }
+      },
+      {
+        "comment": "",
+        "key": "Piyasa",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 2250
+        }
+      },
+      {
+        "comment": "",
+        "key": "Community",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 2256
+        }
+      }
+    ]
+  },
+  "version": 1
+}

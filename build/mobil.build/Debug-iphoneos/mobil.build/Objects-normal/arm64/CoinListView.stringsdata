@@ -1,0 +1,128 @@
+{
+  "source": "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/CoinListView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Coinler yükleniyor...",
+        "location": {
+          "startingColumn": 14,
+          "startingLine": 316
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hata Oluştu",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 336
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tekrar Dene",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 350
+        }
+      },
+      {
+        "comment": "",
+        "key": "İpucu:",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 368
+        }
+      },
+      {
+        "comment": "",
+        "key": "Uygulamamız CoinGecko, CoinMarketCap, CoinStats, CoinCap, CryptoCompare, CoinLayer ve CoinPaprika API'lerini kullanır, internet bağlantınızı kontrol edin veya daha sonra tekrar deneyin.",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 373
+        }
+      },
+      {
+        "comment": "",
+        "key": "#",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 400
+        }
+      },
+      {
+        "comment": "",
+        "key": "Coin",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 401
+        }
+      },
+      {
+        "comment": "",
+        "key": "Fiyat",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 403
+        }
+      },
+      {
+        "comment": "",
+        "key": "24s",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 404
+        }
+      },
+      {
+        "comment": "",
+        "key": "Daha Fazla Yükle",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 460
+        }
+      },
+      {
+        "comment": "",
+        "key": "(%lld/%lld)",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 464
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tüm coinler yüklendi",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 481
+        }
+      },
+      {
+        "comment": "",
+        "key": "Toplam %lld coin",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 485
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 513
+        }
+      },
+      {
+        "comment": "",
+        "key": "Veriler yükleniyor...",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 576
+        }
+      }
+    ]
+  },
+  "version": 1
+}

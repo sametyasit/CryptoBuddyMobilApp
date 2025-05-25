@@ -1,0 +1,112 @@
+{
+  "source": "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/ProfileView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Profil",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 130
+        }
+      },
+      {
+        "comment": "",
+        "key": "Profili Düzenle",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 37
+        }
+      },
+      {
+        "comment": "",
+        "key": "Profil Bilgileri",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 55
+        }
+      },
+      {
+        "comment": "",
+        "key": "Değişiklikleri Kaydet",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 95
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ad Soyad",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 62
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 66
+        }
+      },
+      {
+        "comment": "",
+        "key": "Email",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 72
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 76
+        }
+      },
+      {
+        "comment": "",
+        "key": "Bio",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 84
+        }
+      },
+      {
+        "comment": "",
+        "key": "Çıkış Yap",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 118
+        }
+      },
+      {
+        "comment": "",
+        "key": "Çıkış Yap",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 134
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hesabınızdan çıkış yapmak istediğinize emin misiniz?",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 135
+        }
+      },
+      {
+        "comment": "",
+        "key": "Çıkış Yap",
+        "location": {
+          "startingColumn": 54,
+          "startingLine": 136
+        }
+      }
+    ]
+  },
+  "version": 1
+}

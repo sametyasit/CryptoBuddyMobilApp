@@ -1,0 +1,144 @@
+{
+  "source": "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/SignUpView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "CryptoBuddy",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 31
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hesap Oluştur",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 37
+        }
+      },
+      {
+        "comment": "",
+        "key": "Kullanıcı Adı",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 45
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 49
+        }
+      },
+      {
+        "comment": "",
+        "key": "E-posta",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 56
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 60
+        }
+      },
+      {
+        "comment": "",
+        "key": "Şifre",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 72
+        }
+      },
+      {
+        "comment": "",
+        "key": "Şifre Tekrar",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 78
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 82
+        }
+      },
+      {
+        "comment": "",
+        "key": "Kullanım koşullarını kabul ediyorum",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 88
+        }
+      },
+      {
+        "comment": "",
+        "key": "Kayıt Ol",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 126
+        }
+      },
+      {
+        "comment": "",
+        "key": "Zaten hesabınız var mı?",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 137
+        }
+      },
+      {
+        "comment": "",
+        "key": "Giriş Yap",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 143
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tamam",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 167
+        }
+      },
+      {
+        "comment": "",
+        "key": "Başarılı",
+        "location": {
+          "startingColumn": 69,
+          "startingLine": 165
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hata",
+        "location": {
+          "startingColumn": 85,
+          "startingLine": 165
+        }
+      }
+    ]
+  },
+  "version": 1
+}

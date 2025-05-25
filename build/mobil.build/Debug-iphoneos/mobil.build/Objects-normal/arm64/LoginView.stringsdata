@@ -1,0 +1,176 @@
+{
+  "source": "/Users/samet/Desktop/programming/cryptoBuddy/CryptoBuddyMobilApp/mobil/LoginView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "CryptoBuddy",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 19
+        }
+      },
+      {
+        "comment": "",
+        "key": "Username",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 31
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 35
+        }
+      },
+      {
+        "comment": "",
+        "key": "Password",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 42
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 41,
+          "startingLine": 46
+        }
+      },
+      {
+        "comment": "",
+        "key": "Şifremi unuttum",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 54
+        }
+      },
+      {
+        "comment": "",
+        "key": "Login",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 71
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hesabınız yok mu?",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 86
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hesap Oluştur",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 92
+        }
+      },
+      {
+        "comment": "",
+        "key": "Back",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 106
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hata",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 112
+        }
+      },
+      {
+        "comment": "",
+        "key": "Kullanıcı adı veya şifre hatalı",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 113
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tamam",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 114
+        }
+      },
+      {
+        "comment": "",
+        "key": "Şifre Sıfırlama",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 138
+        }
+      },
+      {
+        "comment": "",
+        "key": "Lütfen kayıtlı e-posta adresinizi girin",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 142
+        }
+      },
+      {
+        "comment": "",
+        "key": "E-posta",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 149
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 153
+        }
+      },
+      {
+        "comment": "",
+        "key": "Şifre Sıfırlama\nBağlantısı Gönder",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 165
+        }
+      },
+      {
+        "comment": "",
+        "key": "Başarılı",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 184
+        }
+      },
+      {
+        "comment": "",
+        "key": "Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 185
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tamam",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 186
+        }
+      }
+    ]
+  },
+  "version": 1
+}
