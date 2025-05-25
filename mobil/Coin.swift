@@ -152,6 +152,18 @@ struct GraphPoint: Codable, Identifiable {
         return Date(timeIntervalSince1970: timestamp)
     }
     
+    // APIGraphPoint'ten dönüştürme için initializer
+    init(from apiPoint: APIService.APIGraphPoint) {
+        self.timestamp = apiPoint.timestamp
+        self.price = apiPoint.price
+    }
+    
+    // Normal initializer
+    init(timestamp: TimeInterval, price: Double) {
+        self.timestamp = timestamp
+        self.price = price
+    }
+    
     enum CodingKeys: String, CodingKey {
         case timestamp, price
     }

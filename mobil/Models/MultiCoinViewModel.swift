@@ -47,6 +47,21 @@ class MultiCoinViewModel: ObservableObject {
             
             self.activeAPIs = [response.source]
             self.isLoaded = true
+            
+            // Update coins
+            if page == 1 {
+                // İlk yükleme veya yenileme - tüm listeyi sıfırlayıp yeni coinleri yükle
+                allCoins = response.coins
+                print("📊 Liste yenilendi: \(allCoins.count) coin")
+                
+                // İlk coin'i kontrol et
+                if let firstCoin = response.coins.first {
+                    print("🔍 İlk coin: \(firstCoin.name) (\(firstCoin.symbol)) - $\(firstCoin.price)")
+                }
+                
+                // Coin logolarını önbelleğe al
+                logoPreloader.preloadLogos(for: response.coins)
+            }
         } catch {
             self.error = error.localizedDescription
             if page > 1 {

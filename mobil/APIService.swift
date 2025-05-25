@@ -897,6 +897,11 @@ class APIService: ObservableObject, Equatable {
     func fetchCoinDetails(coinId: String) async throws -> Coin {
         print("🔍 Coin detayları alınıyor: \(coinId)")
         
+        // Bitcoin için özel kontrol
+        if coinId.lowercased() == "bitcoin" || coinId.lowercased() == "btc" {
+            print("🔍 Bitcoin detayları isteniyor - ID: \(coinId)")
+        }
+        
         // Önce birkaç farklı API deneyelim, birinde veri varsa onu kullanalım
         let apiSources = ["coingecko", "coinmarketcap", "coincap", "cryptocompare"]
         var fetchedCoin: Coin? = nil
@@ -920,6 +925,16 @@ class APIService: ObservableObject, Equatable {
                 if let coin = fetchedCoin, 
                    coin.high24h > 0 && coin.low24h > 0 && coin.ath > 0 {
                     print("✅ \(source.capitalized) API'den coin detayları başarıyla alındı")
+                    
+                    // Bitcoin için özel doğrulama
+                    if coinId.lowercased() == "bitcoin" || coinId.lowercased() == "btc" {
+                        if coin.price < 50000 {
+                            print("⚠️ Bitcoin fiyatı çok düşük (\(coin.price)), başka API denenecek")
+                            continue
+                        }
+                        print("✅ Bitcoin doğrulandı - Fiyat: $\(coin.price)")
+                    }
+                    
                     return coin
                 }
             } catch {

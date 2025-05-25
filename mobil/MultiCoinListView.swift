@@ -41,7 +41,7 @@ struct MultiCoinListView: View {
                         viewModel.refreshCoins()
                     }) {
                         Image(systemName: "arrow.clockwise")
-                            .foregroundColor(AppColors.gold)
+                            .foregroundColor(AppColorsTheme.gold)
                     }
                 }
                 .padding(.horizontal)
@@ -61,6 +61,7 @@ struct MultiCoinListView: View {
                         LazyVStack(spacing: 0) {
                             ForEach(Array(viewModel.allCoins.enumerated()), id: \.element.id) { index, coin in
                                 Button(action: {
+                                    print("🔍 Coin seçildi: \(coin.name) (\(coin.symbol)) - ID: \(coin.id)")
                                     selectedCoinId = coin.id
                                     showCoinDetail = true
                                 }) {
@@ -81,7 +82,7 @@ struct MultiCoinListView: View {
                                         Image(systemName: "chevron.down")
                                             .font(.system(size: 14))
                                     }
-                                    .foregroundColor(AppColors.gold)
+                                    .foregroundColor(AppColorsTheme.gold)
                                     .padding()
                                     .frame(maxWidth: .infinity)
                                     .background(Color(UIColor.darkGray).opacity(0.3))
@@ -97,7 +98,7 @@ struct MultiCoinListView: View {
                             
                             if viewModel.isLoadingMore {
                                 ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
+                                    .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
                                     .padding()
                             }
                         }
@@ -108,7 +109,7 @@ struct MultiCoinListView: View {
                 } else if viewModel.isRefreshing {
                     Spacer()
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: AppColors.gold))
+                        .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
                         .scaleEffect(1.5)
                     Spacer()
                 } else if let error = viewModel.error {
@@ -137,7 +138,7 @@ struct MultiCoinListView: View {
                                 .foregroundColor(.white)
                                 .padding(.vertical, 12)
                                 .padding(.horizontal, 24)
-                                .background(AppColors.gold)
+                                .background(AppColorsTheme.gold)
                                 .cornerRadius(20)
                         }
                         .padding(.top, 10)
@@ -155,7 +156,16 @@ struct MultiCoinListView: View {
         .fullScreenCover(isPresented: $showCoinDetail) {
             if let coinId = selectedCoinId {
                 NavigationView {
-                    TemporaryCoinDetailView(coinId: coinId)
+                    CoinDetailView(coinId: coinId)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .navigationBarTrailing) {
+                                Button("Kapat") {
+                                    showCoinDetail = false
+                                }
+                                .foregroundColor(AppColorsTheme.gold)
+                            }
+                        }
                 }
             }
         }
@@ -165,7 +175,6 @@ struct MultiCoinListView: View {
 struct CoinRow: View {
     let coin: Coin
     let displayRank: Int
-    @State private var logoImage: UIImage? = nil
     
     init(coin: Coin, displayRank: Int? = nil) {
         self.coin = coin
@@ -181,25 +190,13 @@ struct CoinRow: View {
                     .foregroundColor(.gray)
                     .frame(width: 30, alignment: .center)
                 
-                // Logo görünümü - önbellekten veya varsayılan
-                if let logoImage = logoImage {
-                    // Önbellekten logo göster
-                    Image(uiImage: logoImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 30, height: 30)
-                        .clipShape(Circle())
-                } else {
-                    // Varsayılan görünüm
-                    Circle()
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 30, height: 30)
-                        .overlay(
-                            Text(coin.symbol.prefix(1).uppercased())
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundColor(.white)
-                        )
-                }
+                // Logo görünümü - DirectCoinLogoView kullan
+                DirectCoinLogoView(
+                    symbol: coin.symbol,
+                    size: 30,
+                    coinId: coin.id,
+                    imageUrl: coin.image
+                )
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(coin.name)
@@ -233,46 +230,6 @@ struct CoinRow: View {
             .frame(width: 80, alignment: .trailing)
         }
         .padding(.vertical, 4)
-        .onAppear(perform: loadLogo)
-        .onReceive(NotificationCenter.default.publisher(for: LogoPreloader.logoPreloadedNotification)) { notification in
-            // Logo yüklendiğinde güncellemek için
-            if let coinId = notification.object as? String, coinId == coin.id {
-                loadLogo()
-            }
-        }
-    }
-    
-    // Logo yükleme fonksiyonu
-    private func loadLogo() {
-        // Önbellek anahtarı
-        let cacheKey = "\(coin.id)_\(coin.symbol)_logo"
-        
-        // Önbellekten logoyu al
-        if let cachedImage = ImageCache.shared.getImage(forKey: cacheKey) {
-            self.logoImage = cachedImage
-            return
-        }
-        
-        // Alternatif anahtarları dene
-        let altCacheKey = "\(coin.id)_logo"
-        if let altCachedImage = ImageCache.shared.getImage(forKey: altCacheKey) {
-            self.logoImage = altCachedImage
-            return
-        }
-        
-        // Eğer önbellekte yoksa ve image URL'si geçerliyse, önbelleğe almak için URLSession kullan
-        if let url = URL(string: coin.image) {
-            URLSession.shared.dataTask(with: url) { data, response, error in
-                if let data = data, let image = UIImage(data: data) {
-                    DispatchQueue.main.async {
-                        self.logoImage = image
-                        // Önbelleğe kaydet
-                        ImageCache.shared.setImage(image, forKey: cacheKey)
-                    }
-                }
-            }.resume()
-        }
-    }
 }
 
 struct CoinListHeader: View {
@@ -470,7 +427,7 @@ class MultiCoinViewModel: ObservableObject {
                     let existingIds = Set(allCoins.map { $0.id })
                     let uniqueNewCoins = response.coins.filter { !existingIds.contains($0.id) }
                     
-                    print("📊 Benzersiz coin sayısı: \(uniqueNewCoins.count)")
+                    print("�� Benzersiz coin sayısı: \(uniqueNewCoins.count)")
                     
                     if uniqueNewCoins.isEmpty {
                         // API farklı coinleri döndüremiyorsa, başka bir API servisine geçmeyi dene
