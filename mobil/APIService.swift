@@ -179,15 +179,28 @@ class APIService: ObservableObject, Equatable {
     private func fetchFromCoinGecko(page: Int, perPage: Int, priceChangePercentage: String = "24h", cacheKey: String) async throws -> APIResponse {
         print("🔍 CoinGecko API kullanılıyor...")
         
+        // Farklı zaman aralıkları için doğru parametreleri ekle
+        var priceChangeParams = "24h"
+        switch priceChangePercentage {
+        case "1h":
+            priceChangeParams = "1h,24h,7d,30d"
+        case "7d":
+            priceChangeParams = "1h,24h,7d,30d"
+        case "30d":
+            priceChangeParams = "1h,24h,7d,30d"
+        default:
+            priceChangeParams = "1h,24h,7d,30d"
+        }
+        
         // İşlem hacmi ve diğer verileri de almak için parametreler eklendi
-        let urlString = "\(coinGeckoURL)/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=\(perPage)&page=\(page)&sparkline=false&price_change_percentage=\(priceChangePercentage)&include_24h_vol=true&include_24h_change=true&include_last_updated_at=true"
+        let urlString = "\(coinGeckoURL)/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=\(perPage)&page=\(page)&sparkline=false&price_change_percentage=\(priceChangeParams)&include_24h_vol=true&include_24h_change=true&include_last_updated_at=true"
         
         guard let url = URL(string: urlString) else {
             throw APIError.invalidURL
         }
         
         var request = URLRequest(url: url)
-        request.timeoutInterval = 10
+        request.timeoutInterval = 15 // Timeout'u artır
         
         if !coinGeckoKey.isEmpty {
             request.addValue(coinGeckoKey, forHTTPHeaderField: "x-cg-pro-api-key")
@@ -213,8 +226,16 @@ class APIService: ObservableObject, Equatable {
         let decoder = JSONDecoder()
         let geckoCoins = try decoder.decode([CoinGeckoMarket].self, from: data)
         
-        // Coin modellerine dönüştür
-        let mappedCoins = geckoCoins.map { gCoin -> Coin in
+        // Coin modellerine dönüştür ve veri doğruluğunu kontrol et
+        let mappedCoins = geckoCoins.compactMap { gCoin -> Coin? in
+            // Temel veri doğrulaması
+            guard gCoin.current_price > 0,
+                  !gCoin.name.isEmpty,
+                  !gCoin.symbol.isEmpty else {
+                print("⚠️ Geçersiz coin verisi atlandı: \(gCoin.name)")
+                return nil
+            }
+            
             // Main properties
             var coin = Coin(
                 id: gCoin.id,
@@ -227,25 +248,64 @@ class APIService: ObservableObject, Equatable {
                 rank: gCoin.market_cap_rank ?? 0
             )
             
-            // Ek verileri ekle
-            coin.totalVolume = gCoin.total_volume ?? 0
-            coin.high24h = gCoin.high_24h ?? 0
-            coin.low24h = gCoin.low_24h ?? 0
+            // Ek verileri ekle ve doğrula
+            coin.totalVolume = max(0, gCoin.total_volume ?? 0)
+            coin.high24h = max(0, gCoin.high_24h ?? coin.price)
+            coin.low24h = max(0, gCoin.low_24h ?? coin.price)
             coin.priceChange24h = gCoin.price_change_24h ?? 0
-            coin.ath = gCoin.ath ?? 0
+            coin.ath = max(0, gCoin.ath ?? coin.price)
             coin.athChangePercentage = gCoin.ath_change_percentage ?? 0
             
-            // Farklı zaman aralıkları için değişim verilerini ekle
+            // 24h high/low mantık kontrolü
+            if coin.high24h < coin.low24h {
+                print("⚠️ \(coin.name) için 24h high/low değerleri düzeltiliyor")
+                let temp = coin.high24h
+                coin.high24h = coin.low24h
+                coin.low24h = temp
+            }
+            
+            // Fiyat aralığı kontrolü
+            if coin.low24h > coin.price || coin.high24h < coin.price {
+                print("⚠️ \(coin.name) için 24h aralık mevcut fiyatla uyumsuz, düzeltiliyor")
+                coin.low24h = min(coin.low24h, coin.price)
+                coin.high24h = max(coin.high24h, coin.price)
+            }
+            
+            // Farklı zaman aralıkları için değişim verilerini ekle ve doğrula
             if let priceChange1h = gCoin.price_change_percentage_1h_in_currency {
-                coin.changeHour = priceChange1h
+                // Aşırı değişim kontrolü (saatte %50'den fazla değişim şüpheli)
+                if abs(priceChange1h) <= 50 {
+                    coin.changeHour = priceChange1h
+                } else {
+                    print("⚠️ \(coin.name) için şüpheli 1h değişim: \(priceChange1h)%")
+                    coin.changeHour = 0
+                }
             }
             
             if let priceChange7d = gCoin.price_change_percentage_7d_in_currency {
-                coin.changeWeek = priceChange7d
+                // Haftalık değişim kontrolü (%200'den fazla şüpheli)
+                if abs(priceChange7d) <= 200 {
+                    coin.changeWeek = priceChange7d
+                } else {
+                    print("⚠️ \(coin.name) için şüpheli 7d değişim: \(priceChange7d)%")
+                    coin.changeWeek = 0
+                }
             }
             
             if let priceChange30d = gCoin.price_change_percentage_30d_in_currency {
-                coin.changeMonth = priceChange30d
+                // Aylık değişim kontrolü (%500'den fazla şüpheli)
+                if abs(priceChange30d) <= 500 {
+                    coin.changeMonth = priceChange30d
+                } else {
+                    print("⚠️ \(coin.name) için şüpheli 30d değişim: \(priceChange30d)%")
+                    coin.changeMonth = 0
+                }
+            }
+            
+            // 24h değişim kontrolü - daha esnek limit
+            if abs(coin.change24h) > 500 {
+                print("⚠️ \(coin.name) için aşırı 24h değişim: \(coin.change24h)%")
+                coin.change24h = 0
             }
             
             return coin
@@ -255,6 +315,7 @@ class APIService: ObservableObject, Equatable {
         let uniqueCoins = await coinTracker.filterUniqueCoins(mappedCoins)
         
         print("✅ CoinGecko başarılı: \(mappedCoins.count) coin bulundu, \(uniqueCoins.count) benzersiz")
+        print("📊 Veri doğruluğu: \(uniqueCoins.filter { $0.change24h != 0 }.count)/\(uniqueCoins.count) coin'de 24h değişim verisi mevcut")
         
         let geckoResponse: APIResponse = APIResponse(coins: uniqueCoins, source: "CoinGecko")
         coinCache[cacheKey] = (Date(), geckoResponse)
@@ -273,7 +334,7 @@ class APIService: ObservableObject, Equatable {
         }
         
         var request = URLRequest(url: url)
-        request.timeoutInterval = 10
+        request.timeoutInterval = 15 // Timeout'u artır
         
         // CoinCap API key eklenmedi, genellikle anahtarsız da çalışır
         
@@ -293,22 +354,43 @@ class APIService: ObservableObject, Equatable {
         let decoder = JSONDecoder()
         let coinCapResponse = try decoder.decode(CoinCapResponse.self, from: data)
         
-        let mappedCoins = coinCapResponse.data.enumerated().map { index, coinData in
+        let mappedCoins = coinCapResponse.data.enumerated().compactMap { index, coinData -> Coin? in
+            // Temel veri doğrulaması
+            guard let price = Double(coinData.priceUsd), price > 0,
+                  !coinData.name.isEmpty,
+                  !coinData.symbol.isEmpty else {
+                print("⚠️ CoinCap - Geçersiz coin verisi atlandı: \(coinData.name)")
+                return nil
+            }
+            
+            let change24h = Double(coinData.changePercent24Hr) ?? 0
+            let marketCap = Double(coinData.marketCapUsd) ?? 0
+            
+            // Aşırı değişim kontrolü - daha esnek limit
+            if abs(change24h) > 500 {
+                print("⚠️ CoinCap - \(coinData.name) için aşırı 24h değişim: \(change24h)%")
+            }
+            
             var coin = Coin(
                 id: coinData.id,
                 name: coinData.name,
                 symbol: coinData.symbol.uppercased(),
-                price: Double(coinData.priceUsd) ?? 0,
-                change24h: Double(coinData.changePercent24Hr) ?? 0,
-                marketCap: Double(coinData.marketCapUsd) ?? 0,
+                price: price,
+                change24h: abs(change24h) <= 500 ? change24h : 0, // Aşırı değişimleri sıfırla
+                marketCap: max(0, marketCap),
                 image: "https://assets.coincap.io/assets/icons/\(coinData.symbol.lowercased())@2x.png",
                 rank: Int(coinData.rank) ?? (offset + index + 1)
             )
             
-            // Ek verileri ekle
-            if let volumeStr = coinData.volumeUsd24Hr, let volume = Double(volumeStr) {
+            // Ek verileri ekle ve doğrula
+            if let volumeStr = coinData.volumeUsd24Hr, let volume = Double(volumeStr), volume >= 0 {
                 coin.totalVolume = volume
             }
+            
+            // CoinCap farklı zaman aralıkları sağlamadığı için varsayılan değerler
+            coin.changeHour = 0
+            coin.changeWeek = 0
+            coin.changeMonth = 0
             
             return coin
         }
@@ -317,6 +399,7 @@ class APIService: ObservableObject, Equatable {
         let uniqueCoins = await coinTracker.filterUniqueCoins(mappedCoins)
         
         print("✅ CoinCap başarılı: \(mappedCoins.count) coin bulundu, \(uniqueCoins.count) benzersiz")
+        print("📊 CoinCap veri doğruluğu: \(uniqueCoins.filter { $0.change24h != 0 }.count)/\(uniqueCoins.count) coin'de 24h değişim verisi mevcut")
         
         let capResponse: APIResponse = APIResponse(coins: uniqueCoins, source: "CoinCap")
         coinCache[cacheKey] = (Date(), capResponse)
@@ -335,7 +418,7 @@ class APIService: ObservableObject, Equatable {
         }
         
         var request = URLRequest(url: url)
-        request.timeoutInterval = 10
+        request.timeoutInterval = 15 // Timeout'u artır
         
         // API anahtarını ekle (CoinMarketCap için gerekli)
         request.addValue(coinMarketCapKey, forHTTPHeaderField: "X-CMC_PRO_API_KEY")
@@ -371,22 +454,40 @@ class APIService: ObservableObject, Equatable {
         let decoder = JSONDecoder()
         let cmcResponse = try decoder.decode(CoinMarketCapResponse.self, from: data)
         
-        let mappedCoins = cmcResponse.data.map { coinData in
+        let mappedCoins = cmcResponse.data.compactMap { coinData -> Coin? in
             let usdQuote = coinData.quote["USD"] ?? CoinMarketCapQuote(price: 0, volume24h: 0, percentChange24h: 0, marketCap: 0)
+            
+            // Temel veri doğrulaması
+            guard usdQuote.price > 0,
+                  !coinData.name.isEmpty,
+                  !coinData.symbol.isEmpty else {
+                print("⚠️ CoinMarketCap - Geçersiz coin verisi atlandı: \(coinData.name)")
+                return nil
+            }
+            
+            // Aşırı değişim kontrolü - daha esnek limit
+            if abs(usdQuote.percentChange24h) > 500 {
+                print("⚠️ CoinMarketCap - \(coinData.name) için aşırı 24h değişim: \(usdQuote.percentChange24h)%")
+            }
             
             var coin = Coin(
                 id: "\(coinData.id)".lowercased(),
                 name: coinData.name,
                 symbol: coinData.symbol,
                 price: usdQuote.price,
-                change24h: usdQuote.percentChange24h,
-                marketCap: usdQuote.marketCap,
+                change24h: abs(usdQuote.percentChange24h) <= 500 ? usdQuote.percentChange24h : 0, // Aşırı değişimleri sıfırla
+                marketCap: max(0, usdQuote.marketCap),
                 image: "https://s2.coinmarketcap.com/static/img/coins/64x64/\(coinData.id).png",
                 rank: coinData.cmcRank
             )
             
-            // Ek verileri ekle
-            coin.totalVolume = usdQuote.volume24h
+            // Ek verileri ekle ve doğrula
+            coin.totalVolume = max(0, usdQuote.volume24h)
+            
+            // CoinMarketCap farklı zaman aralıkları sağlamadığı için varsayılan değerler
+            coin.changeHour = 0
+            coin.changeWeek = 0
+            coin.changeMonth = 0
             
             return coin
         }
@@ -395,6 +496,7 @@ class APIService: ObservableObject, Equatable {
         let uniqueCoins = await coinTracker.filterUniqueCoins(mappedCoins)
         
         print("✅ CoinMarketCap başarılı: \(mappedCoins.count) coin bulundu, \(uniqueCoins.count) benzersiz")
+        print("📊 CoinMarketCap veri doğruluğu: \(uniqueCoins.filter { $0.change24h != 0 }.count)/\(uniqueCoins.count) coin'de 24h değişim verisi mevcut")
         
         let cmcApiResponse: APIResponse = APIResponse(coins: uniqueCoins, source: "CoinMarketCap")
         coinCache[cacheKey] = (Date(), cmcApiResponse)
