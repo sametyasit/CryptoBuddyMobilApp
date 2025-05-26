@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct LoginView: View {
     @Binding var isPresented: Bool
@@ -62,6 +63,13 @@ struct LoginView: View {
                         Button(action: {
                             // Login işlemi
                             if username == "admin" && password == "1234" {
+                                // Giriş bilgilerini kaydet
+                                UserDefaults.standard.set(true, forKey: "isLoggedIn")
+                                UserDefaults.standard.set(username, forKey: "username")
+                                
+                                // Bildirim gönder
+                                NotificationCenter.default.post(name: Notification.Name("UserLoggedIn"), object: nil)
+                                
                                 isLoggedIn = true
                                 isPresented = false
                             } else {
