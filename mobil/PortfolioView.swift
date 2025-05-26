@@ -1,8 +1,9 @@
 import SwiftUI
+import Foundation
 
 struct PortfolioView: View {
     @Binding var showingLoginView: Bool
-    @EnvironmentObject private var authService: AuthService
+    @State private var isLoggedIn = false
     
     private let goldColor = Color(red: 0.984, green: 0.788, blue: 0.369)
     
@@ -11,14 +12,9 @@ struct PortfolioView: View {
             ZStack {
                 Color.black.edgesIgnoringSafeArea(.all)
                 
-                if authService.isAuthenticated {
+                if isLoggedIn {
                     // Oturumlu kullanıcı
-                    if let user = authService.currentUser {
-                        PortfolioContent(user: user)
-                    } else {
-                        Text("Kullanıcı bilgileri yüklenemedi.")
-                            .foregroundColor(.white)
-                    }
+                    PortfolioContent()
                 } else {
                     // Oturum açılmamış
                     VStack(spacing: 25) {
@@ -58,13 +54,18 @@ struct PortfolioView: View {
                 }
             }
             .navigationBarTitle("Portföy", displayMode: .inline)
+            .onAppear {
+                // Kullanıcının giriş durumunu kontrol et
+                isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
+            }
+            .onChange(of: showingLoginView) { oldValue, newValue in
+                isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
+            }
         }
     }
 }
 
 struct PortfolioContent: View {
-    let user: User
-    @EnvironmentObject private var authService: AuthService
     @State private var favoriteCoins: [Coin] = []
     @State private var isLoading = true
     @State private var totalPortfolioValue: Double = 0
@@ -118,7 +119,7 @@ struct PortfolioContent: View {
                 ], spacing: 15) {
                     PortfolioStatCard(
                         title: "Toplam Varlık",
-                        value: "\(user.favoriteCoins.count)",
+                        value: "\(favoriteCoins.count)",
                         icon: "bitcoinsign.circle.fill"
                     )
                     
@@ -167,7 +168,7 @@ struct PortfolioContent: View {
                         .padding(.horizontal)
                     } else {
                         ForEach(favoriteCoins) { coin in
-                            NavigationLink(destination: CoinDetailView(coin: coin)) {
+                            NavigationLink(destination: CoinDetailView(coinId: coin.id)) {
                                 FavoriteCoinRow(coin: coin)
                             }
                         }
@@ -185,8 +186,7 @@ struct PortfolioContent: View {
     private func loadFavoriteCoins() {
         isLoading = true
         
-        // Favori coinlerde veri yoksa demoyu göster
-        guard !user.favoriteCoins.isEmpty else {
+        // Demo veriler göster
             // Demo veriler
             Task {
                 do {
@@ -201,27 +201,6 @@ struct PortfolioContent: View {
                     self.isLoading = false
                 }
             }
-            return
-        }
-        
-        // Kullanıcının favori coinlerini al
-        Task {
-            do {
-                let response = try await APIService.shared.fetchCoins(page: 1, perPage: 100)
-                DispatchQueue.main.async {
-                    // Kullanıcının favori coinlerini filtrele
-                    self.favoriteCoins = response.coins.filter { coin in
-                        user.favoriteCoins.contains(coin.id)
-                    }
-                    
-                    self.calculatePortfolioValue()
-                    self.isLoading = false
-                }
-            } catch {
-                print("Error loading favorite coins: \(error.localizedDescription)")
-                self.isLoading = false
-            }
-        }
     }
     
     private func calculatePortfolioValue() {
@@ -332,7 +311,6 @@ struct FavoriteCoinRow: View {
 struct PortfolioView_Previews: PreviewProvider {
     static var previews: some View {
         PortfolioView(showingLoginView: .constant(false))
-            .environmentObject(AuthService())
             .preferredColorScheme(.dark)
     }
 } 
