@@ -5,11 +5,11 @@ struct Coin: Identifiable, Codable {
     let id: String
     let name: String
     let symbol: String
-    let price: Double
-    let change24h: Double
-    let marketCap: Double
+    var price: Double
+    var change24h: Double
+    var marketCap: Double
     let image: String
-    let rank: Int
+    var rank: Int
     
     // Farklı zaman aralıkları için değişim değerleri
     var changeHour: Double = 0
