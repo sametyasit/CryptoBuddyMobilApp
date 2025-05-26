@@ -2056,11 +2056,14 @@ struct PortfolioView: View {
     private func getChangeValueForTimeFrame(coin: Coin) -> Double {
         switch timeframeParam {
         case "1h":
-            return coin.changeHour
+            // Eğer 1h verisi yoksa 24h verisini kullan
+            return coin.changeHour != 0 ? coin.changeHour : coin.change24h
         case "7d":
-            return coin.changeWeek 
+            // Eğer 7d verisi yoksa 24h verisini kullan
+            return coin.changeWeek != 0 ? coin.changeWeek : coin.change24h
         case "30d":
-            return coin.changeMonth
+            // Eğer 30d verisi yoksa 24h verisini kullan
+            return coin.changeMonth != 0 ? coin.changeMonth : coin.change24h
         default:
             return coin.change24h
         }
@@ -2079,7 +2082,7 @@ struct PortfolioView: View {
     private func loadCoinsAsync() async {
         do {
             // Gerçek zaman aralığı parametresini kullan
-            print("Seçilen zaman aralığı: \(timeframeParam)")
+            print("🔄 Seçilen zaman aralığı: \(timeframeParam)")
             
             // Timeframe parametresini API'ye geçir
             let response = try await APIService.shared.fetchCoins(
@@ -2088,40 +2091,93 @@ struct PortfolioView: View {
                 priceChangePercentage: timeframeParam
             )
             
-            self.coins = response.coins
+            print("✅ API'den \(response.coins.count) coin alındı")
+            
+            // Veri doğruluğunu kontrol et
+            let validCoins = response.coins.filter { coin in
+                coin.price > 0 && !coin.name.isEmpty && coin.rank > 0
+            }
+            
+            print("📊 Geçerli coin sayısı: \(validCoins.count)")
+            
+            if validCoins.isEmpty {
+                print("❌ Geçerli coin bulunamadı!")
+                errorMessage = "Geçerli coin verisi bulunamadı. Lütfen tekrar deneyin."
+                isLoading = false
+                return
+            }
+            
+            self.coins = validCoins
+            
+            // Debug: İlk birkaç coin'in değişim verilerini logla
+            for (index, coin) in validCoins.prefix(5).enumerated() {
+                print("🪙 Coin \(index + 1): \(coin.name) - 24h: \(coin.change24h)%, 1h: \(coin.changeHour)%, 7d: \(coin.changeWeek)%, 30d: \(coin.changeMonth)%")
+            }
+            
             filterAndSortCoins()
             isLoading = false
         } catch {
-            print("Coin verileri yüklenemedi: \(error)")
-            errorMessage = "Coin verileri yüklenirken bir hata oluştu"
+            print("❌ Coin verileri yüklenemedi: \(error)")
+            errorMessage = "Coin verileri yüklenirken bir hata oluştu: \(error.localizedDescription)"
             isLoading = false
         }
     }
     
     private func filterAndSortCoins() {
-        // Zaman aralığına göre değişim alanını belirle
-        let changeField: KeyPath<Coin, Double>
+        print("🔄 Filtreleme başlıyor - Zaman aralığı: \(timeframeParam), Yükselenler: \(isShowingGainers)")
         
-        // Zaman aralığına göre doğru değişim alanını seç
-        switch timeframeParam {
-        case "1h":
-            changeField = \.changeHour
-        case "7d":
-            changeField = \.changeWeek
-        case "30d":
-            changeField = \.changeMonth
-        default:
-            changeField = \.change24h
+        // Önce tüm coinlerin geçerli olduğundan emin ol
+        let validCoins = coins.filter { coin in
+            coin.price > 0 && !coin.name.isEmpty && coin.rank > 0
         }
         
-        // Seçilen değişim alanına göre sırala
+        print("📊 Geçerli coin sayısı: \(validCoins.count)")
+        
+        // Zaman aralığına göre sıralama yap
+        let sortedCoins: [Coin]
+        
         if isShowingGainers {
-            // Yükselenler - büyükten küçüğe sırala
-            coins.sort { $0[keyPath: changeField] > $1[keyPath: changeField] }
+            // Yükselenler - en yüksek değişimden en düşüğe
+            sortedCoins = validCoins.sorted { coin1, coin2 in
+                let change1 = getChangeValueForTimeFrame(coin: coin1)
+                let change2 = getChangeValueForTimeFrame(coin: coin2)
+                
+                // Önce pozitif değişimleri sırala, sonra negatif olanları
+                if change1 > 0 && change2 <= 0 {
+                    return true
+                } else if change1 <= 0 && change2 > 0 {
+                    return false
+                } else {
+                    return change1 > change2
+                }
+            }
         } else {
-            // Düşenler - küçükten büyüğe sırala
-            coins.sort { $0[keyPath: changeField] < $1[keyPath: changeField] }
+            // Düşenler - en düşük değişimden en yükseğe
+            sortedCoins = validCoins.sorted { coin1, coin2 in
+                let change1 = getChangeValueForTimeFrame(coin: coin1)
+                let change2 = getChangeValueForTimeFrame(coin: coin2)
+                
+                // Önce negatif değişimleri sırala, sonra pozitif olanları
+                if change1 < 0 && change2 >= 0 {
+                    return true
+                } else if change1 >= 0 && change2 < 0 {
+                    return false
+                } else {
+                    return change1 < change2
+                }
+            }
         }
+        
+        self.coins = sortedCoins
+        
+        // Debug için ilk 5 coin'i logla
+        print("📊 Sıralama sonrası ilk 5 coin:")
+        for (index, coin) in sortedCoins.prefix(5).enumerated() {
+            let changeValue = getChangeValueForTimeFrame(coin: coin)
+            print("  \(index + 1). \(coin.name): \(String(format: "%.2f", changeValue))%")
+        }
+        
+        print("✅ Filtreleme tamamlandı - Toplam: \(coins.count) coin")
     }
 }
 
@@ -2130,18 +2186,15 @@ struct CommunityView: View {
     @Binding var showingLoginView: Bool
     @State private var isLoggedIn = false
     @State private var newPostText = ""
+    @State private var comments: [CommunityComment] = []
+    @State private var username = ""
     
     var body: some View {
         NavigationView {
             ZStack {
                 Color.black.ignoresSafeArea()
                 
-                VStack {
-                    Text("Community View")
-                        .font(.largeTitle)
-                        .foregroundColor(.white)
-                        .padding()
-                    
+                VStack(spacing: 0) {
                     if !isLoggedIn {
                         // Giriş yapmayan kullanıcılar için bilgi kartı
                         HStack(spacing: 16) {
@@ -2171,6 +2224,73 @@ struct CommunityView: View {
                         .background(Color(UIColor.darkGray).opacity(0.3))
                         .cornerRadius(16)
                         .padding(.horizontal)
+                        .padding(.top, 10)
+                    } else {
+                        // Yorum yazma alanı
+                        VStack(spacing: 12) {
+                            HStack {
+                                Image(systemName: "person.circle.fill")
+                                    .font(.system(size: 32))
+                                    .foregroundColor(AppColorsTheme.gold)
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(username)
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                    
+                                    Text("Bir şeyler paylaş...")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                Spacer()
+                            }
+                            
+                            // Yorum yazma alanı
+                            VStack(spacing: 8) {
+                                TextField("Düşüncelerinizi paylaşın...", text: $newPostText, axis: .vertical)
+                                    .textFieldStyle(PlainTextFieldStyle())
+                                    .padding()
+                                    .background(Color(UIColor.systemGray6).opacity(0.2))
+                                    .cornerRadius(12)
+                                    .foregroundColor(.white)
+                                    .lineLimit(3...6)
+                                
+                                HStack {
+                                    Spacer()
+                                    
+                                    Button(action: {
+                                        addComment()
+                                    }) {
+                                        Text("Paylaş")
+                                            .font(.headline)
+                                            .foregroundColor(.black)
+                                            .padding(.horizontal, 20)
+                                            .padding(.vertical, 8)
+                                            .background(AppColorsTheme.gold)
+                                            .cornerRadius(20)
+                                    }
+                                    .disabled(newPostText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                    .opacity(newPostText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.6 : 1.0)
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color(UIColor.systemGray6).opacity(0.1))
+                        .cornerRadius(16)
+                        .padding(.horizontal)
+                        .padding(.top, 10)
+                    }
+                    
+                    // Yorumlar listesi
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(comments) { comment in
+                                CommentCard(comment: comment)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 16)
                     }
                     
                     Spacer()
@@ -2183,7 +2303,11 @@ struct CommunityView: View {
                     if isLoggedIn {
                         Button(action: {
                             // Çıkış yap
+                            UserDefaults.standard.set(false, forKey: "isLoggedIn")
+                            UserDefaults.standard.removeObject(forKey: "username")
+                            UserDefaults.standard.removeObject(forKey: "userEmail")
                             isLoggedIn = false
+                            comments = []
                         }) {
                             Image(systemName: "rectangle.portrait.and.arrow.right")
                                 .foregroundColor(AppColorsTheme.gold)
@@ -2200,12 +2324,81 @@ struct CommunityView: View {
                 }
             }
             .onAppear {
-                // Kullanıcının giriş durumunu kontrol et
-                isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
+                checkLoginStatus()
+                loadComments()
             }
             .onChange(of: showingLoginView) { oldValue, newValue in
-                isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
+                checkLoginStatus()
             }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("UserLoggedIn"))) { _ in
+                checkLoginStatus()
+            }
+        }
+    }
+    
+    private func checkLoginStatus() {
+        isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
+        if isLoggedIn {
+            username = UserDefaults.standard.string(forKey: "username") ?? "Kullanıcı"
+        }
+    }
+    
+    private func addComment() {
+        let trimmedText = newPostText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else { return }
+        
+        let newComment = CommunityComment(
+            id: UUID().uuidString,
+            username: username,
+            content: trimmedText,
+            timestamp: Date(),
+            likes: 0,
+            isLiked: false
+        )
+        
+        comments.insert(newComment, at: 0)
+        saveComments()
+        newPostText = ""
+    }
+    
+    private func loadComments() {
+        if let data = UserDefaults.standard.data(forKey: "communityComments"),
+           let savedComments = try? JSONDecoder().decode([CommunityComment].self, from: data) {
+            comments = savedComments
+        } else {
+            // Demo yorumlar
+            comments = [
+                CommunityComment(
+                    id: "1",
+                    username: "CryptoExpert",
+                    content: "Bitcoin'in son yükselişi gerçekten etkileyici! Uzun vadeli yatırımcılar için harika fırsatlar var.",
+                    timestamp: Date().addingTimeInterval(-3600),
+                    likes: 12,
+                    isLiked: false
+                ),
+                CommunityComment(
+                    id: "2",
+                    username: "BlockchainFan",
+                    content: "Ethereum'un yeni güncellemesi ile gas ücretleri düştü. DeFi projelerine yatırım yapmak için iyi bir zaman olabilir.",
+                    timestamp: Date().addingTimeInterval(-7200),
+                    likes: 8,
+                    isLiked: false
+                ),
+                CommunityComment(
+                    id: "3",
+                    username: "AltcoinHunter",
+                    content: "Küçük cap coinlerde dikkatli olmak lazım. DYOR (Do Your Own Research) unutmayın!",
+                    timestamp: Date().addingTimeInterval(-10800),
+                    likes: 15,
+                    isLiked: false
+                )
+            ]
+        }
+    }
+    
+    private func saveComments() {
+        if let data = try? JSONEncoder().encode(comments) {
+            UserDefaults.standard.set(data, forKey: "communityComments")
         }
     }
 }
@@ -2217,6 +2410,1172 @@ extension GraphPoint {
             timestamp: apiModel.timestamp,
             price: apiModel.price
         )
+    }
+}
+
+// Basit AuthService tanımı
+class AuthService: ObservableObject {
+    @Published var isAuthenticated = false
+    @Published var currentUser: User?
+    @Published var errorMessage: String?
+    
+    init() {
+        checkAuthStatus()
+    }
+    
+    func checkAuthStatus() {
+        if UserDefaults.standard.bool(forKey: "isLoggedIn") {
+            let user = User(
+                id: "user123",
+                username: UserDefaults.standard.string(forKey: "username") ?? "User",
+                email: UserDefaults.standard.string(forKey: "userEmail") ?? "user@example.com",
+                gender: "Other",
+                country: "Global",
+                phoneNumber: "",
+                favoriteCoins: []
+            )
+            self.currentUser = user
+            self.isAuthenticated = true
+        }
+    }
+    
+    func signIn(email: String, password: String, completion: @escaping (Bool) -> Void) {
+        // Demo giriş
+        if email == "demo@example.com" && password == "123456" {
+            let user = User(
+                id: "user123",
+                username: "DemoUser",
+                email: email,
+                gender: "Other",
+                country: "Global",
+                phoneNumber: "",
+                favoriteCoins: ["bitcoin", "ethereum"]
+            )
+            
+            self.currentUser = user
+            self.isAuthenticated = true
+            UserDefaults.standard.set(true, forKey: "isLoggedIn")
+            UserDefaults.standard.set(user.username, forKey: "username")
+            UserDefaults.standard.set(user.email, forKey: "userEmail")
+            completion(true)
+        } else {
+            self.errorMessage = "Geçersiz giriş bilgileri"
+            completion(false)
+        }
+    }
+    
+    func signUp(username: String, email: String, password: String, gender: String, country: String, phoneNumber: String, completion: @escaping (Bool) -> Void) {
+        // Demo kayıt
+        let user = User(
+            id: UUID().uuidString,
+            username: username,
+            email: email,
+            gender: gender,
+            country: country,
+            phoneNumber: phoneNumber,
+            favoriteCoins: []
+        )
+        
+        self.currentUser = user
+        self.isAuthenticated = true
+        UserDefaults.standard.set(true, forKey: "isLoggedIn")
+        UserDefaults.standard.set(user.username, forKey: "username")
+        UserDefaults.standard.set(user.email, forKey: "userEmail")
+        completion(true)
+    }
+    
+    func signOut(completion: @escaping (Bool) -> Void) {
+        self.currentUser = nil
+        self.isAuthenticated = false
+        UserDefaults.standard.set(false, forKey: "isLoggedIn")
+        UserDefaults.standard.removeObject(forKey: "username")
+        UserDefaults.standard.removeObject(forKey: "userEmail")
+        completion(true)
+    }
+}
+
+// Basit User modeli
+struct User: Identifiable, Codable {
+    let id: String
+    let username: String
+    let email: String
+    let gender: String
+    let country: String
+    let phoneNumber: String
+    var favoriteCoins: [String]
+}
+
+// Community Comment modeli
+struct CommunityComment: Identifiable, Codable {
+    let id: String
+    let username: String
+    let content: String
+    let timestamp: Date
+    var likes: Int
+    var isLiked: Bool
+}
+
+// Comment Card View
+struct CommentCard: View {
+    @State var comment: CommunityComment
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Kullanıcı bilgisi ve zaman
+            HStack {
+                Image(systemName: "person.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(AppColorsTheme.gold)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(comment.username)
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    
+                    Text(timeAgoString(from: comment.timestamp))
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                
+                Spacer()
+            }
+            
+            // Yorum içeriği
+            Text(comment.content)
+                .font(.body)
+                .foregroundColor(.white)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+            
+            // Beğeni butonu
+            HStack {
+                Button(action: {
+                    toggleLike()
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: comment.isLiked ? "heart.fill" : "heart")
+                            .foregroundColor(comment.isLiked ? .red : .gray)
+                        
+                        Text("\(comment.likes)")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(.top, 4)
+        }
+        .padding()
+        .background(Color(UIColor.systemGray6).opacity(0.2))
+        .cornerRadius(12)
+    }
+    
+    private func toggleLike() {
+        if comment.isLiked {
+            comment.likes -= 1
+            comment.isLiked = false
+        } else {
+            comment.likes += 1
+            comment.isLiked = true
+        }
+        
+        // Yorumları kaydet
+        saveCommentUpdate()
+    }
+    
+    private func saveCommentUpdate() {
+        // UserDefaults'tan mevcut yorumları al
+        if let data = UserDefaults.standard.data(forKey: "communityComments"),
+           var savedComments = try? JSONDecoder().decode([CommunityComment].self, from: data) {
+            
+            // Bu yorumu güncelle
+            if let index = savedComments.firstIndex(where: { $0.id == comment.id }) {
+                savedComments[index] = comment
+                
+                // Geri kaydet
+                if let updatedData = try? JSONEncoder().encode(savedComments) {
+                    UserDefaults.standard.set(updatedData, forKey: "communityComments")
+                }
+            }
+        }
+    }
+    
+    private func timeAgoString(from date: Date) -> String {
+        let now = Date()
+        let timeInterval = now.timeIntervalSince(date)
+        
+        if timeInterval < 60 {
+            return "Az önce"
+        } else if timeInterval < 3600 {
+            let minutes = Int(timeInterval / 60)
+            return "\(minutes) dakika önce"
+        } else if timeInterval < 86400 {
+            let hours = Int(timeInterval / 3600)
+            return "\(hours) saat önce"
+        } else {
+            let days = Int(timeInterval / 86400)
+            return "\(days) gün önce"
+        }
+    }
+}
+
+// MARK: - More View
+struct MoreView: View {
+    @Binding var showingLoginView: Bool
+    @State private var showingPopularCoins = false
+    @State private var showingAIPortfolio = false
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Ana Özellikler
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Özellikler")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding(.horizontal)
+                            
+                            VStack(spacing: 12) {
+                                Button(action: {
+                                    showingPopularCoins = true
+                                }) {
+                                    MoreMenuRow(
+                                        icon: "star.fill",
+                                        title: "Popüler Coinler",
+                                        subtitle: "En çok takip edilen coinler",
+                                        color: AppColorsTheme.gold
+                                    )
+                                }
+                                
+                                Button(action: {
+                                    showingAIPortfolio = true
+                                }) {
+                                    MoreMenuRow(
+                                        icon: "brain.head.profile",
+                                        title: "AI Coin Sepeti",
+                                        subtitle: "Yapay zeka ile kişisel portföy önerisi",
+                                        color: .purple
+                                    )
+                                }
+                                
+
+                            }
+                            .padding(.horizontal)
+                        }
+                        
+                        // Topluluk
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Topluluk")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding(.horizontal)
+                            
+                            VStack(spacing: 12) {
+                                NavigationLink(destination: CommunityView(showingLoginView: $showingLoginView)) {
+                                    MoreMenuRow(
+                                        icon: "person.3.fill",
+                                        title: "Community",
+                                        subtitle: "Topluluk yorumları ve tartışmalar",
+                                        color: .green
+                                    )
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        
+                        // Uygulama Bilgileri
+                        VStack(spacing: 8) {
+                            Text("CryptoBuddy v1.0.0")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                            
+                            Text("© 2024 CryptoBuddy. Tüm hakları saklıdır.")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        .padding(.top, 30)
+                    }
+                    .padding(.vertical, 20)
+                }
+            }
+            .navigationTitle("Yapay Zeka Sepeti")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .sheet(isPresented: $showingPopularCoins) {
+            PopularCoinsView()
+        }
+        .sheet(isPresented: $showingAIPortfolio) {
+            AIPortfolioView()
+        }
+    }
+}
+
+// More Menu Row
+struct MoreMenuRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let color: Color
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(color.opacity(0.2))
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 24))
+                    .foregroundColor(color)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14))
+                .foregroundColor(.gray)
+        }
+        .padding()
+        .background(Color(UIColor.systemGray6).opacity(0.1))
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - Popüler Coinler View
+struct PopularCoinsView: View {
+    @Environment(\.presentationMode) var presentationMode
+    @State private var popularCoins: [Coin] = []
+    @State private var isLoading = true
+    @State private var selectedCoinID = ""
+    @State private var showingCoinDetail = false
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                if isLoading {
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .progressViewStyle(CircularProgressViewStyle(tint: AppColorsTheme.gold))
+                        
+                        Text("Popüler coinler yükleniyor...")
+                            .foregroundColor(.gray)
+                            .padding(.top, 20)
+                    }
+                } else {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // Başlık
+                            VStack(spacing: 8) {
+                                Text("🔥 Popüler Coinler")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                
+                                Text("En çok takip edilen ve işlem gören coinler")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                            }
+                            .padding(.top, 20)
+                            
+                            // Coin listesi
+                            LazyVStack(spacing: 12) {
+                                ForEach(Array(popularCoins.enumerated()), id: \.element.id) { index, coin in
+                                    Button(action: {
+                                        selectedCoinID = coin.id
+                                        showingCoinDetail = true
+                                    }) {
+                                        PopularCoinRow(coin: coin, rank: index + 1)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        .padding(.bottom, 30)
+                    }
+                }
+            }
+            .navigationTitle("Popüler Coinler")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarItems(trailing: Button("Kapat") {
+                presentationMode.wrappedValue.dismiss()
+            }.foregroundColor(AppColorsTheme.gold))
+            .onAppear {
+                loadPopularCoins()
+            }
+            .sheet(isPresented: $showingCoinDetail) {
+                CoinDetailView(coinId: selectedCoinID)
+            }
+        }
+    }
+    
+    private func loadPopularCoins() {
+        Task {
+            do {
+                let response = try await APIService.shared.fetchCoins(page: 1, perPage: 20)
+                await MainActor.run {
+                    self.popularCoins = response.coins
+                    self.isLoading = false
+                }
+            } catch {
+                await MainActor.run {
+                    self.isLoading = false
+                }
+            }
+        }
+    }
+}
+
+struct PopularCoinRow: View {
+    let coin: Coin
+    let rank: Int
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Sıralama
+            ZStack {
+                Circle()
+                    .fill(AppColorsTheme.gold.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                
+                Text("\(rank)")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(AppColorsTheme.gold)
+            }
+            
+            // Coin logosu
+            if let url = URL(string: coin.image) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 40, height: 40)
+                            .clipShape(Circle())
+                    case .empty, .failure:
+                        Image(systemName: "bitcoinsign.circle.fill")
+                            .resizable()
+                            .scaledToFit()
+                            .foregroundColor(AppColorsTheme.gold)
+                            .frame(width: 40, height: 40)
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            }
+            
+            // Coin bilgileri
+            VStack(alignment: .leading, spacing: 4) {
+                Text(coin.name)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                
+                Text(coin.symbol.uppercased())
+                    .font(.caption)
+                    .foregroundColor(.gray)
+            }
+            
+            Spacer()
+            
+            // Fiyat ve değişim
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(coin.formattedPrice)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                
+                HStack(spacing: 4) {
+                    Image(systemName: coin.change24h >= 0 ? "arrow.up" : "arrow.down")
+                        .font(.caption)
+                        .foregroundColor(coin.change24h >= 0 ? .green : .red)
+                    
+                    Text(coin.formattedChange)
+                        .font(.caption)
+                        .foregroundColor(coin.change24h >= 0 ? .green : .red)
+                }
+            }
+        }
+        .padding()
+        .background(Color(UIColor.systemGray6).opacity(0.1))
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - AI Portfolio View
+struct AIPortfolioView: View {
+    @Environment(\.presentationMode) var presentationMode
+    @State private var currentStep = 0
+    @State private var budget = ""
+    @State private var riskLevel = 1 // 1: Düşük, 2: Orta, 3: Yüksek
+    @State private var investmentPeriod = 0 // 0: Kısa, 1: Orta, 2: Uzun
+    @State private var coinCount = 5
+    @State private var preferredCategories: Set<String> = []
+    @State private var isGenerating = false
+    @State private var generatedPortfolio: [AIPortfolioItem] = []
+    @State private var showingResults = false
+    
+    let riskLevels = ["Düşük Risk", "Orta Risk", "Yüksek Risk"]
+    let investmentPeriods = ["Kısa Vade (1-6 ay)", "Orta Vade (6-18 ay)", "Uzun Vade (1+ yıl)"]
+    let categories = ["DeFi", "Layer 1", "Layer 2", "Meme Coins", "AI & Big Data", "Gaming", "NFT", "Stablecoins"]
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                if showingResults {
+                    AIPortfolioResultsView(
+                        portfolio: generatedPortfolio,
+                        budget: budget,
+                        riskLevel: riskLevels[riskLevel],
+                        period: investmentPeriods[investmentPeriod],
+                        onClose: {
+                            presentationMode.wrappedValue.dismiss()
+                        },
+                        onRegenerate: {
+                            showingResults = false
+                            generatePortfolio()
+                        }
+                    )
+                } else {
+                    ScrollView {
+                        VStack(spacing: 30) {
+                            // Başlık
+                            VStack(spacing: 12) {
+                                Image(systemName: "brain.head.profile")
+                                    .font(.system(size: 50))
+                                    .foregroundColor(.purple)
+                                
+                                Text("🤖 AI Coin Sepeti")
+                                    .font(.title)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                
+                                Text("Yapay zeka ile kişiselleştirilmiş portföy önerisi alın")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding(.top, 20)
+                            
+                            // Form Adımları
+                            VStack(spacing: 25) {
+                                // Bütçe
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("💰 Yatırım Bütçeniz")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                    
+                                    TextField("Örn: 10000", text: $budget)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .keyboardType(.numberPad)
+                                    
+                                    Text("USD cinsinden toplam yatırım miktarınız")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                // Risk Seviyesi
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("⚡ Risk Seviyeniz")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                    
+                                    Picker("Risk Seviyesi", selection: $riskLevel) {
+                                        ForEach(0..<riskLevels.count, id: \.self) { index in
+                                            Text(riskLevels[index]).tag(index)
+                                        }
+                                    }
+                                    .pickerStyle(SegmentedPickerStyle())
+                                    
+                                    Text(getRiskDescription())
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                // Yatırım Vadesi
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("⏰ Yatırım Vadesi")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                    
+                                    Picker("Yatırım Vadesi", selection: $investmentPeriod) {
+                                        ForEach(0..<investmentPeriods.count, id: \.self) { index in
+                                            Text(investmentPeriods[index]).tag(index)
+                                        }
+                                    }
+                                    .pickerStyle(SegmentedPickerStyle())
+                                }
+                                
+                                // Coin Sayısı
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("🎯 Portföydeki Coin Sayısı: \(coinCount)")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                    
+                                    Slider(value: Binding(
+                                        get: { Double(coinCount) },
+                                        set: { coinCount = Int($0) }
+                                    ), in: 3...15, step: 1)
+                                    .accentColor(.purple)
+                                    
+                                    Text("Çeşitlendirme için önerilen: 5-10 coin")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                                
+                                // Tercih Edilen Kategoriler
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("🏷️ İlgi Alanlarınız (Opsiyonel)")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                    
+                                    LazyVGrid(columns: [
+                                        GridItem(.flexible()),
+                                        GridItem(.flexible())
+                                    ], spacing: 8) {
+                                        ForEach(categories, id: \.self) { category in
+                                            Button(action: {
+                                                if preferredCategories.contains(category) {
+                                                    preferredCategories.remove(category)
+                                                } else {
+                                                    preferredCategories.insert(category)
+                                                }
+                                            }) {
+                                                Text(category)
+                                                    .font(.caption)
+                                                    .padding(.horizontal, 12)
+                                                    .padding(.vertical, 6)
+                                                    .background(preferredCategories.contains(category) ? .purple : Color(UIColor.systemGray6))
+                                                    .foregroundColor(preferredCategories.contains(category) ? .white : .gray)
+                                                    .cornerRadius(15)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                            
+                            // Generate Button
+                            Button(action: {
+                                generatePortfolio()
+                            }) {
+                                HStack {
+                                    if isGenerating {
+                                        ProgressView()
+                                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                            .scaleEffect(0.8)
+                                        
+                                        Text("AI Analiz Ediyor...")
+                                    } else {
+                                        Image(systemName: "sparkles")
+                                        Text("AI Portföy Oluştur")
+                                    }
+                                }
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [.purple, .blue]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(12)
+                                .disabled(budget.isEmpty || isGenerating)
+                                .opacity(budget.isEmpty ? 0.6 : 1.0)
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 30)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("AI Coin Sepeti")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarItems(trailing: Button("Kapat") {
+                presentationMode.wrappedValue.dismiss()
+            }.foregroundColor(AppColorsTheme.gold))
+        }
+    }
+    
+    private func getRiskDescription() -> String {
+        switch riskLevel {
+        case 0: return "Stabil coinler ve büyük cap projeler"
+        case 1: return "Dengeli portföy, orta cap coinler"
+        case 2: return "Yüksek potansiyel, küçük cap coinler"
+        default: return ""
+        }
+    }
+    
+    private func generatePortfolio() {
+        isGenerating = true
+        
+        // Simulated AI analysis
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            let portfolio = AIPortfolioGenerator.generatePortfolio(
+                budget: Double(budget) ?? 1000,
+                riskLevel: riskLevel,
+                period: investmentPeriod,
+                coinCount: coinCount,
+                categories: preferredCategories
+            )
+            
+            self.generatedPortfolio = portfolio
+            self.isGenerating = false
+            self.showingResults = true
+        }
+    }
+}
+
+// AI Portfolio Item Model
+struct AIPortfolioItem: Identifiable {
+    let id = UUID()
+    let coinName: String
+    let symbol: String
+    let allocation: Double // Yüzde
+    let amount: Double // USD
+    let reasoning: String
+    let riskScore: Int // 1-5
+    let category: String
+    let imageUrl: String
+}
+
+// AI Portfolio Generator
+struct AIPortfolioGenerator {
+    static func generatePortfolio(
+        budget: Double,
+        riskLevel: Int,
+        period: Int,
+        coinCount: Int,
+        categories: Set<String>
+    ) -> [AIPortfolioItem] {
+        
+        var portfolio: [AIPortfolioItem] = []
+        
+        // Risk seviyesine göre coin dağılımı
+        let coinData = getCoinDataByRisk(riskLevel: riskLevel, period: period, categories: categories)
+        let selectedCoins = Array(coinData.shuffled().prefix(coinCount))
+        
+        // Allocation hesaplama (risk seviyesine göre)
+        let allocations = calculateAllocations(coins: selectedCoins, riskLevel: riskLevel, coinCount: coinCount)
+        
+        for (index, coin) in selectedCoins.enumerated() {
+            let allocation = allocations[index]
+            let amount = budget * (allocation / 100)
+            
+            portfolio.append(AIPortfolioItem(
+                coinName: coin.name,
+                symbol: coin.symbol,
+                allocation: allocation,
+                amount: amount,
+                reasoning: coin.reasoning,
+                riskScore: coin.riskScore,
+                category: coin.category,
+                imageUrl: coin.imageUrl
+            ))
+        }
+        
+        return portfolio.sorted { $0.allocation > $1.allocation }
+    }
+    
+    private static func getCoinDataByRisk(riskLevel: Int, period: Int, categories: Set<String>) -> [CoinData] {
+        let allCoins = [
+            // Düşük Risk
+            CoinData(name: "Bitcoin", symbol: "BTC", category: "Layer 1", riskScore: 2, reasoning: "En güvenli ve likidite açısından en güçlü kripto para", imageUrl: "https://assets.coingecko.com/coins/images/1/large/bitcoin.png"),
+            CoinData(name: "Ethereum", symbol: "ETH", category: "Layer 1", riskScore: 2, reasoning: "Smart contract lideri, güçlü ekosistem", imageUrl: "https://assets.coingecko.com/coins/images/279/large/ethereum.png"),
+            CoinData(name: "BNB", symbol: "BNB", category: "Layer 1", riskScore: 3, reasoning: "Binance ekosistemi desteği", imageUrl: "https://assets.coingecko.com/coins/images/825/large/bnb-icon2_2x.png"),
+            
+            // Orta Risk
+            CoinData(name: "Cardano", symbol: "ADA", category: "Layer 1", riskScore: 3, reasoning: "Akademik yaklaşım, sürdürülebilir blockchain", imageUrl: "https://assets.coingecko.com/coins/images/975/large/cardano.png"),
+            CoinData(name: "Solana", symbol: "SOL", category: "Layer 1", riskScore: 4, reasoning: "Yüksek performans, NFT ve DeFi ekosistemi", imageUrl: "https://assets.coingecko.com/coins/images/4128/large/solana.png"),
+            CoinData(name: "Polygon", symbol: "MATIC", category: "Layer 2", riskScore: 3, reasoning: "Ethereum ölçeklendirme çözümü", imageUrl: "https://assets.coingecko.com/coins/images/4713/large/matic-token-icon.png"),
+            CoinData(name: "Chainlink", symbol: "LINK", category: "DeFi", riskScore: 3, reasoning: "Oracle ağı lideri", imageUrl: "https://assets.coingecko.com/coins/images/877/large/chainlink-new-logo.png"),
+            
+            // Yüksek Risk
+            CoinData(name: "Avalanche", symbol: "AVAX", category: "Layer 1", riskScore: 4, reasoning: "Hızlı büyüyen DeFi ekosistemi", imageUrl: "https://assets.coingecko.com/coins/images/12559/large/Avalanche_Circle_RedWhite_Trans.png"),
+            CoinData(name: "Polkadot", symbol: "DOT", category: "Layer 1", riskScore: 4, reasoning: "Interoperability çözümü", imageUrl: "https://assets.coingecko.com/coins/images/12171/large/polkadot.png"),
+            CoinData(name: "Uniswap", symbol: "UNI", category: "DeFi", riskScore: 4, reasoning: "DEX lideri, DeFi innovasyonu", imageUrl: "https://assets.coingecko.com/coins/images/12504/large/uniswap-uni.png"),
+            CoinData(name: "Dogecoin", symbol: "DOGE", category: "Meme Coins", riskScore: 5, reasoning: "Topluluk desteği, mainstream kabul", imageUrl: "https://assets.coingecko.com/coins/images/5/large/dogecoin.png"),
+            CoinData(name: "Shiba Inu", symbol: "SHIB", category: "Meme Coins", riskScore: 5, reasoning: "Güçlü topluluk, ekosistem geliştirme", imageUrl: "https://assets.coingecko.com/coins/images/11939/large/shiba.png")
+        ]
+        
+        // Risk seviyesine göre filtrele
+        let filteredByRisk = allCoins.filter { coin in
+            switch riskLevel {
+            case 0: return coin.riskScore <= 3 // Düşük risk
+            case 1: return coin.riskScore >= 2 && coin.riskScore <= 4 // Orta risk
+            case 2: return coin.riskScore >= 3 // Yüksek risk
+            default: return true
+            }
+        }
+        
+        // Kategori tercihine göre filtrele
+        if !categories.isEmpty {
+            let categoryFiltered = filteredByRisk.filter { categories.contains($0.category) }
+            return categoryFiltered.isEmpty ? filteredByRisk : categoryFiltered
+        }
+        
+        return filteredByRisk
+    }
+    
+    private static func calculateAllocations(coins: [CoinData], riskLevel: Int, coinCount: Int) -> [Double] {
+        var allocations: [Double] = []
+        
+        switch riskLevel {
+        case 0: // Düşük risk - büyük coinlere ağırlık
+            let baseAllocation = 100.0 / Double(coinCount)
+            for i in 0..<coinCount {
+                if i < 2 { // İlk 2 coin daha fazla
+                    allocations.append(baseAllocation * 1.5)
+                } else {
+                    allocations.append(baseAllocation * 0.75)
+                }
+            }
+        case 1: // Orta risk - dengeli dağılım
+            let baseAllocation = 100.0 / Double(coinCount)
+            for _ in 0..<coinCount {
+                allocations.append(baseAllocation)
+            }
+        case 2: // Yüksek risk - daha çeşitli dağılım
+            let baseAllocation = 100.0 / Double(coinCount)
+            for i in 0..<coinCount {
+                let variation = Double.random(in: 0.7...1.3)
+                allocations.append(baseAllocation * variation)
+            }
+        default:
+            break
+        }
+        
+        // Toplam 100% olacak şekilde normalize et
+        let total = allocations.reduce(0, +)
+        allocations = allocations.map { ($0 / total) * 100 }
+        
+        return allocations
+    }
+}
+
+struct CoinData {
+    let name: String
+    let symbol: String
+    let category: String
+    let riskScore: Int
+    let reasoning: String
+    let imageUrl: String
+}
+
+// MARK: - AI Portfolio Results View
+struct AIPortfolioResultsView: View {
+    let portfolio: [AIPortfolioItem]
+    let budget: String
+    let riskLevel: String
+    let period: String
+    let onClose: () -> Void
+    let onRegenerate: () -> Void
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Başlık
+                VStack(spacing: 12) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 50))
+                        .foregroundColor(.green)
+                    
+                    Text("🎉 AI Portföyünüz Hazır!")
+                        .font(.title)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Text("Kişiselleştirilmiş coin sepetiniz oluşturuldu")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                }
+                .padding(.top, 20)
+                
+                // Portföy Özeti
+                VStack(spacing: 16) {
+                    Text("📊 Portföy Özeti")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    VStack(spacing: 12) {
+                        HStack {
+                            Text("Toplam Bütçe:")
+                                .foregroundColor(.gray)
+                            Spacer()
+                            Text("$\(budget)")
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        }
+                        
+                        HStack {
+                            Text("Risk Seviyesi:")
+                                .foregroundColor(.gray)
+                            Spacer()
+                            Text(riskLevel)
+                                .fontWeight(.bold)
+                                .foregroundColor(getRiskColor())
+                        }
+                        
+                        HStack {
+                            Text("Yatırım Vadesi:")
+                                .foregroundColor(.gray)
+                            Spacer()
+                            Text(period)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        }
+                        
+                        HStack {
+                            Text("Coin Sayısı:")
+                                .foregroundColor(.gray)
+                            Spacer()
+                            Text("\(portfolio.count)")
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        }
+                    }
+                    .padding()
+                    .background(Color(UIColor.systemGray6).opacity(0.1))
+                    .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                
+                // Portföy Dağılımı
+                VStack(spacing: 16) {
+                    Text("💼 Önerilen Portföy")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    LazyVStack(spacing: 12) {
+                        ForEach(portfolio) { item in
+                            AIPortfolioItemRow(item: item)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+                
+                // AI Analiz Özeti
+                VStack(spacing: 16) {
+                    Text("🤖 AI Analiz Özeti")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    
+                    VStack(spacing: 12) {
+                        Text(getAIAnalysisSummary())
+                            .font(.body)
+                            .foregroundColor(.gray)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding()
+                    .background(Color(UIColor.systemGray6).opacity(0.1))
+                    .cornerRadius(12)
+                }
+                .padding(.horizontal)
+                
+                // Aksiyon Butonları
+                VStack(spacing: 12) {
+                    Button(action: onRegenerate) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Yeni Portföy Oluştur")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            LinearGradient(
+                                gradient: Gradient(colors: [.purple, .blue]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .cornerRadius(12)
+                    }
+                    
+                    Button(action: onClose) {
+                        Text("Kapat")
+                            .font(.headline)
+                            .foregroundColor(.gray)
+                            .padding()
+                            .frame(maxWidth: .infinity)
+                            .background(Color(UIColor.systemGray6).opacity(0.2))
+                            .cornerRadius(12)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 30)
+            }
+        }
+        .background(Color.black.ignoresSafeArea())
+    }
+    
+    private func getRiskColor() -> Color {
+        switch riskLevel {
+        case "Düşük Risk": return .green
+        case "Orta Risk": return .orange
+        case "Yüksek Risk": return .red
+        default: return .white
+        }
+    }
+    
+    private func getAIAnalysisSummary() -> String {
+        let totalCoins = portfolio.count
+        let avgRisk = portfolio.reduce(0) { $0 + $1.riskScore } / totalCoins
+        let topAllocation = portfolio.first?.allocation ?? 0
+        
+        return """
+        Bu portföy, \(riskLevel.lowercased()) profilinize uygun olarak tasarlandı. Toplam \(totalCoins) coin ile çeşitlendirme sağlanmış, en yüksek ağırlık %\(String(format: "%.1f", topAllocation)) ile \(portfolio.first?.coinName ?? ""). 
+        
+        Ortalama risk skoru \(avgRisk)/5 seviyesinde. \(period.lowercased()) için optimize edilmiş bu portföy, piyasa dalgalanmalarına karşı dengeli bir yaklaşım sunuyor.
+        
+        ⚠️ Bu öneri yatırım tavsiyesi değildir. Kendi araştırmanızı yapın.
+        """
+    }
+}
+
+struct AIPortfolioItemRow: View {
+    let item: AIPortfolioItem
+    @State private var showingDetails = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showingDetails.toggle()
+                }
+            }) {
+                HStack(spacing: 16) {
+                    // Coin logosu
+                    if let url = URL(string: item.imageUrl) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 40, height: 40)
+                                    .clipShape(Circle())
+                            case .empty, .failure:
+                                Image(systemName: "bitcoinsign.circle.fill")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .foregroundColor(AppColorsTheme.gold)
+                                    .frame(width: 40, height: 40)
+                            @unknown default:
+                                EmptyView()
+                            }
+                        }
+                    }
+                    
+                    // Coin bilgileri
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.coinName)
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        
+                        HStack(spacing: 8) {
+                            Text(item.symbol.uppercased())
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                            
+                            Text(item.category)
+                                .font(.caption)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.purple.opacity(0.3))
+                                .foregroundColor(.purple)
+                                .cornerRadius(4)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    // Allocation ve miktar
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("\(String(format: "%.1f", item.allocation))%")
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        
+                        Text("$\(String(format: "%.0f", item.amount))")
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                    }
+                    
+                    // Risk göstergesi
+                    VStack(spacing: 2) {
+                        ForEach(0..<5) { index in
+                            Circle()
+                                .fill(index < item.riskScore ? getRiskColor(item.riskScore) : Color.gray.opacity(0.3))
+                                .frame(width: 4, height: 4)
+                        }
+                    }
+                    
+                    Image(systemName: showingDetails ? "chevron.up" : "chevron.down")
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                .padding()
+            }
+            
+            if showingDetails {
+                VStack(alignment: .leading, spacing: 8) {
+                    Divider()
+                        .background(Color.gray.opacity(0.3))
+                    
+                    Text("AI Analizi:")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.white)
+                    
+                    Text(item.reasoning)
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                        .multilineTextAlignment(.leading)
+                }
+                .padding(.horizontal)
+                .padding(.bottom)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .background(Color(UIColor.systemGray6).opacity(0.1))
+        .cornerRadius(12)
+    }
+    
+    private func getRiskColor(_ risk: Int) -> Color {
+        switch risk {
+        case 1...2: return .green
+        case 3: return .orange
+        case 4...5: return .red
+        default: return .gray
+        }
     }
 }
 
@@ -2255,6 +3614,18 @@ struct MainTabView: View {
                     Image(systemName: "person.3.fill")
                     Text("Community")
                 }
+            
+            ProfileView(showingLoginView: $showingLoginView)
+                .tabItem {
+                    Image(systemName: "person.circle.fill")
+                    Text("Profil")
+                }
+            
+            MoreView(showingLoginView: $showingLoginView)
+                .tabItem {
+                    Image(systemName: "brain.head.profile")
+                    Text("Yapay Zeka Sepeti")
+                }
         }
         .accentColor(AppColorsTheme.gold)
         .sheet(isPresented: $showingLoginView) {
@@ -2263,5 +3634,3 @@ struct MainTabView: View {
         .preferredColorScheme(.dark)
     }
 }
-
-
