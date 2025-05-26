@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 
 struct SignUpView: View {
     @Environment(\.presentationMode) var presentationMode
@@ -119,8 +120,16 @@ struct SignUpView: View {
                                     return
                                 }
                                 
-                                // Kayıt işlemi başarılı
-                                alertMessage = "Hesabınız başarıyla oluşturuldu"
+                                // Kayıt işlemi başarılı - otomatik giriş yap
+                                UserDefaults.standard.set(true, forKey: "isLoggedIn")
+                                UserDefaults.standard.set(firstName, forKey: "username")
+                                UserDefaults.standard.set(email, forKey: "userEmail")
+                                
+                                // Bildirim gönder
+                                NotificationCenter.default.post(name: Notification.Name("UserLoggedIn"), object: nil)
+                                
+                                alertMessage = "Hesabınız başarıyla oluşturuldu ve giriş yapıldı"
+                                isSuccess = true
                                 showingAlert = true
                             }) {
                                 Text("Kayıt Ol")
@@ -166,6 +175,7 @@ struct SignUpView: View {
                     message: Text(alertMessage),
                     dismissButton: .default(Text("Tamam")) {
                         if alertMessage.contains("başarı") {
+                            // Kayıt başarılı ise view'ı kapat
                             presentationMode.wrappedValue.dismiss()
                         }
                     }
