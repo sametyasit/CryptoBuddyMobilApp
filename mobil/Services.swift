@@ -4,6 +4,46 @@ import SwiftUI
 // Define the service classes directly in the module namespace
 // instead of in a nested namespace
 
+// MARK: - User Model
+public struct User: Identifiable, Codable {
+    public let id: String
+    public let username: String
+    public let email: String
+    public let gender: String
+    public let country: String
+    public let phoneNumber: String
+    public var favoriteCoins: [String]
+    
+    public init(id: String, username: String, email: String, gender: String, country: String, phoneNumber: String, favoriteCoins: [String] = []) {
+        self.id = id
+        self.username = username
+        self.email = email
+        self.gender = gender
+        self.country = country
+        self.phoneNumber = phoneNumber
+        self.favoriteCoins = favoriteCoins
+    }
+}
+
+// MARK: - Comment Model
+public struct Comment: Identifiable, Codable {
+    public let id: String
+    public let userId: String
+    public let coinId: String
+    public let text: String
+    public let username: String
+    public let createdAt: Date
+    
+    public init(id: String, userId: String, coinId: String, text: String, username: String, createdAt: Date) {
+        self.id = id
+        self.userId = userId
+        self.coinId = coinId
+        self.text = text
+        self.username = username
+        self.createdAt = createdAt
+    }
+}
+
 // MARK: - Auth Service
 
 /// Authentication service for the application
